@@ -17,6 +17,13 @@ async function main() {
   if (result.admin.created && result.admin.credentialsPath) {
     console.log('Created organizer login. Credentials: ' + result.admin.credentialsPath);
   }
+  if (process.env.LOG_SAMPLE_RSVP_LINKS === '1') {
+    // Test site only: sample players use fake @example.com addresses, so their links are safe to log.
+    const svc = require('./services');
+    for (const p of await svc.listPlayers({ includeInactive: false })) {
+      if (/@example\.com$/i.test(p.email)) console.log('Sample RSVP link: ' + p.name + ' ' + svc.rsvpUrl(p));
+    }
+  }
   if (result.games && result.games.rsvpsSeeded) console.log('Seeded sample RSVPs for ' + result.games.game.game_date);
 
   if (process.env.SETUP_TOKEN) {

@@ -21,6 +21,8 @@ services:
         value: America/Phoenix
       - key: RUN_JOBS
         value: "0"
+      - key: LOG_SAMPLE_RSVP_LINKS
+        value: "1"
       - key: SETUP_TOKEN_TTL_HOURS
         value: "168"
       - key: SESSION_SECRET

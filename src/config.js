@@ -29,7 +29,8 @@ const config = {
   adminPassword: process.env.ADMIN_PASSWORD || '',
   credentialsPath: path.join(ROOT, 'data', 'admin-credentials.txt'),
   runJobs: process.env.RUN_JOBS === '1',
-  baseUrl: (process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  // RENDER_EXTERNAL_URL is set automatically by Render (e.g. https://poker-group.onrender.com).
+  baseUrl: (process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000').replace(/\/$/, ''),
   nodeEnv: process.env.NODE_ENV || 'development',
 };
 

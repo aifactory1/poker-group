@@ -1,0 +1,21 @@
+<%- include('partials/header') %>
+<div class="login-wrap" style="padding:0 0 2rem">
+  <div class="card login-card">
+    <h2>Organizer login</h2>
+    <p class="muted">Sign in to manage Poker Group. Player RSVP links do not need an account.</p>
+    <form method="post" action="/login">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="hidden" name="next" value="<%= next %>" />
+      <label class="field">Email
+        <input type="email" name="email" required autocomplete="username" value="eric@example.com" />
+      </label>
+      <label class="field">Password
+        <input type="password" name="password" required autocomplete="current-password" />
+      </label>
+      <div class="row-actions">
+        <button type="submit" class="btn btn-primary">Log in</button>
+      </div>
+    </form>
+  </div>
+</div>
+<%- include('partials/footer') %>

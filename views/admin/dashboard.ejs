@@ -1,0 +1,63 @@
+<%- include('../partials/header') %>
+<section>
+  <div class="card">
+    <h2>Next game</h2>
+    <% if (!game) { %>
+      <p class="muted">No upcoming scheduled Monday. Check the calendar to restore a night.</p>
+    <% } else { %>
+      <p id="dash-game-summary">
+        <strong>Game:</strong> <%= formatNiceDate(game.game_date) %><br />
+        <strong>Time:</strong> <%= formatTime12(game.start_time) %>–<%= formatTime12(game.end_time) %>
+      </p>
+      <p>
+        <% if (tally.meetsMinimum) { %>
+          <span class="status-pill on">On track — <%= tally.yesPeople %> confirmed (need <%= tally.minimum %>)</span>
+        <% } else { %>
+          <span class="status-pill warn">Short so far — <%= tally.yesPeople %> confirmed (need <%= tally.minimum %>)</span>
+        <% } %>
+      </p>
+      <div class="stat-row" aria-live="polite">
+        <div class="stat yes"><div class="n"><%= tally.yesPeople %></div><div class="l">Yes (people, incl. guests)</div></div>
+        <div class="stat no"><div class="n"><%= tally.no %></div><div class="l">No</div></div>
+        <div class="stat maybe"><div class="n"><%= tally.maybe %></div><div class="l">Maybe</div></div>
+        <div class="stat unanswered"><div class="n"><%= tally.unanswered %></div><div class="l">Unanswered</div></div>
+      </div>
+      <p class="muted">Yes total counts guests. Maybe does not count. Auto-cancel is <%= settings.auto_cancel_enabled ? 'ON' : 'OFF' %> at <%= formatTime12(settings.cutoff_time) %> on game day, minimum <%= settings.minimum_yes %>.</p>
+      <h3>Attendees for this game</h3>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Player</th>
+              <th scope="col">RSVP</th>
+              <th scope="col">Party size</th>
+              <th scope="col">Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% tally.rows.forEach(function (row) { %>
+              <tr>
+                <td><%= row.player.name %></td>
+                <td><%= row.status === 'unanswered' ? '—' : row.status %></td>
+                <td><%= row.status === 'yes' ? row.coming : '—' %></td>
+                <td>
+                  <% if (row.rsvp && row.rsvp.message) { %>
+                    <span class="vis-tag"><%= row.rsvp.message_visibility === 'group' ? 'Group' : 'Organizer only' %></span>
+                    <%= row.rsvp.message %>
+                  <% } else { %>—<% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <div class="row-actions">
+        <form method="post" action="/admin/jobs/auto-cancel">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <button type="submit" class="btn btn-secondary">Run auto-cancel check now (log only)</button>
+        </form>
+      </div>
+    <% } %>
+  </div>
+</section>
+<%- include('../partials/footer') %>

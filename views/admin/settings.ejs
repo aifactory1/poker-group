@@ -1,0 +1,83 @@
+<%- include('../partials/header') %>
+<section>
+  <div class="card">
+    <h2>Settings</h2>
+    <p class="muted">All times are America/Phoenix (Arizona). Invitation, reminder, and auto-cancel jobs are ready to schedule later; for now they only write a log — nothing is sent.</p>
+    <form method="post" action="/settings">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <label class="field">Group name
+        <input type="text" name="group_name" value="<%= settings.group_name %>" />
+      </label>
+      <label class="field">Invitation day / time
+        <span class="hint">Default: Friday 10:00 AM</span>
+        <div class="grid-2" style="margin-top:.35rem">
+          <select name="invite_weekday" aria-label="Invitation weekday">
+            <% [4,5,6].forEach(function (d) { %>
+              <option value="<%= d %>" <%= Number(settings.invite_weekday) === d ? 'selected' : '' %>><%= weekdayName(d) %></option>
+            <% }) %>
+          </select>
+          <input type="time" name="invite_time" value="<%= settings.invite_time %>" aria-label="Invitation time Arizona" />
+        </div>
+      </label>
+      <label class="field">Reminder for unanswered
+        <span class="hint">Default: Sunday 10:00 AM — only players who have not replied</span>
+        <div class="grid-2" style="margin-top:.35rem">
+          <select name="remind_weekday" aria-label="Reminder weekday">
+            <% [0,6].forEach(function (d) { %>
+              <option value="<%= d %>" <%= Number(settings.remind_weekday) === d ? 'selected' : '' %>><%= weekdayName(d) %></option>
+            <% }) %>
+          </select>
+          <input type="time" name="remind_time" value="<%= settings.remind_time %>" aria-label="Reminder time Arizona" />
+        </div>
+      </label>
+      <div class="divider"></div>
+      <label class="field" style="display:flex;align-items:flex-start;gap:.6rem">
+        <input type="checkbox" name="auto_cancel_enabled" value="1" <%= settings.auto_cancel_enabled ? 'checked' : '' %> style="width:auto;margin-top:.2rem" />
+        <span>Auto-cancel if fewer than minimum confirmed people (including guests) by cutoff
+          <span class="hint">Default: ON — Monday 4:00 PM, minimum 5. Maybe does not count.</span>
+        </span>
+      </label>
+      <div class="grid-2">
+        <label class="field">Cutoff time (game day, Arizona)
+          <input type="time" name="cutoff_time" value="<%= settings.cutoff_time %>" />
+        </label>
+        <label class="field">Minimum confirmed people
+          <input type="number" name="minimum_yes" min="2" max="20" value="<%= settings.minimum_yes %>" />
+        </label>
+      </div>
+      <div class="grid-2">
+        <label class="field">Default start time
+          <input type="time" name="default_start_time" value="<%= settings.default_start_time %>" />
+        </label>
+        <label class="field">Default end time
+          <input type="time" name="default_end_time" value="<%= settings.default_end_time %>" />
+        </label>
+      </div>
+      <div class="row-actions">
+        <button type="submit" class="btn btn-primary">Save settings</button>
+      </div>
+    </form>
+    <div class="row-actions" style="margin-top:1rem">
+      <form method="post" action="/settings/job/invite">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="btn btn-secondary">Simulate Friday invite</button>
+      </form>
+      <form method="post" action="/settings/job/reminder">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="btn btn-secondary">Simulate Sunday reminder</button>
+      </form>
+      <form method="post" action="/settings/job/auto-cancel">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="btn btn-secondary">Simulate auto-cancel check</button>
+      </form>
+    </div>
+    <% if (logs.length) { %>
+      <h3>Notification log (stub)</h3>
+      <div class="sim-box show" role="status"><% logs.forEach(function (l) { %>[<%= l.created_at %>] <%= l.job_type %>
+<%= l.payload %>
+
+<% }) %></div>
+    <% } %>
+  </div>
+</section>
+<%- include('../partials/footer') %>

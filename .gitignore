@@ -1,0 +1,18 @@
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+# Runtime data (databases, setup tokens, credentials, logs, tunnel files)
+data/*
+!data/.gitkeep
+
+# Local-only helper scripts and binaries (tunnels, keys)
+bin/
+
+node_modules/
+npm-debug.log*
+*.log
+*.pem
+*.key
+screenshots/*.png

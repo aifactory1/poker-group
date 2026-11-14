@@ -1,0 +1,24 @@
+<%- include('partials/header') %>
+<div class="login-wrap" style="padding:0 0 2rem">
+  <div class="card login-card">
+    <h2>Set your organizer password</h2>
+    <p class="muted">This one-time link expires in 48 hours and can only be used once. Choose the email and password you’ll use to sign in. Player RSVP links do not need an account.</p>
+    <form method="post" action="/setup/<%= token %>">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <label class="field">Login email
+        <input type="email" name="email" required autocomplete="username" value="<%= defaultEmail %>" />
+      </label>
+      <label class="field">New password
+        <input type="password" name="password" required minlength="8" autocomplete="new-password" />
+      </label>
+      <label class="field">Confirm password
+        <input type="password" name="password_confirm" required minlength="8" autocomplete="new-password" />
+      </label>
+      <p class="muted">Use at least 8 characters. Don’t reuse a password from another site.</p>
+      <div class="row-actions">
+        <button type="submit" class="btn btn-primary">Save and sign in</button>
+      </div>
+    </form>
+  </div>
+</div>
+<%- include('partials/footer') %>

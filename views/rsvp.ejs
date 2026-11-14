@@ -1,0 +1,42 @@
+<%- include('partials/header') %>
+<section>
+  <div class="card">
+    <h2>RSVP</h2>
+    <p class="muted">Hi <%= player.name %>. This is your private link — no sign-in needed. You can change your answer later with the same link.</p>
+    <% if (!game) { %>
+      <p>There is no upcoming scheduled game right now.</p>
+    <% } else { %>
+      <div id="rsvp-game-line" class="muted">
+        <p id="rsvp-game-date" style="margin:.25rem 0">Game: <%= formatNiceDate(game.game_date) %></p>
+        <p id="rsvp-game-time" style="margin:.25rem 0">Time: <%= formatTime12(game.start_time) %>–<%= formatTime12(game.end_time) %></p>
+      </div>
+      <form method="post" action="/rsvp/<%= token %>" id="rsvp-form">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <input type="hidden" name="status" id="rsvp-status" value="<%= rsvp ? rsvp.status : '' %>" />
+        <div class="rsvp-btns" role="group" aria-label="RSVP choice">
+          <button type="button" class="btn btn-yes" data-rsvp="yes" aria-pressed="false">Yes</button>
+          <button type="button" class="btn btn-no" data-rsvp="no" aria-pressed="false">No</button>
+          <button type="button" class="btn btn-maybe" data-rsvp="maybe" aria-pressed="false">Maybe</button>
+        </div>
+        <label class="field">Total coming (includes you)
+          <input type="number" name="party_size" id="rsvp-guests" min="1" max="12" value="<%= rsvp && rsvp.party_size ? rsvp.party_size : 1 %>" aria-describedby="rsvp-guests-hint" />
+          <span class="hint" id="rsvp-guests-hint">Guests count toward the five-player minimum. You count as 1.</span>
+        </label>
+        <label class="field">Message (optional)
+          <textarea name="message" placeholder="Optional note…"><%= rsvp && rsvp.message ? rsvp.message : '' %></textarea>
+        </label>
+        <label class="field">Who can see this message?
+          <select name="message_visibility" aria-label="Message visibility">
+            <option value="organizer" <%= !rsvp || rsvp.message_visibility !== 'group' ? 'selected' : '' %>>Only the organizer (default)</option>
+            <option value="group" <%= rsvp && rsvp.message_visibility === 'group' ? 'selected' : '' %>>Everyone in Poker Group</option>
+          </select>
+        </label>
+        <div class="row-actions">
+          <button type="submit" class="btn btn-primary">Save RSVP</button>
+          <a class="btn btn-secondary" href="/rsvp/<%= token %>/whos">Who's playing</a>
+        </div>
+      </form>
+    <% } %>
+  </div>
+</section>
+<%- include('partials/footer') %>

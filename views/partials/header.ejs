@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= title ? title + ' — ' : '' %>Poker Group</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="demo-banner" role="status">
+    <strong>TEST SITE: sample data, nothing is emailed.</strong>
+    <span> Sample players use @example.com. Emails and texts are only logged, never sent.</span>
+  </div>
+  <div class="wrap">
+    <header class="app-header">
+      <div class="brand">
+        <div class="chip" aria-hidden="true">♠</div>
+        <div>
+          <h1>Poker Group</h1>
+          <p>Nickel-dime Mondays · Arizona time</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <% if (typeof admin !== 'undefined' && admin) { %>
+          <form method="post" action="/logout" style="display:inline">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <button type="submit" class="btn btn-ghost btn-sm">Log out</button>
+          </form>
+        <% } %>
+      </div>
+    </header>
+    <% if (typeof nav !== 'undefined') { %>
+      <nav class="tabs" aria-label="Organizer sections">
+        <a href="/"<%= nav === 'dashboard' ? ' aria-current="page"' : '' %>>Dashboard</a>
+        <a href="/players"<%= nav === 'players' ? ' aria-current="page"' : '' %>>Players</a>
+        <a href="/calendar"<%= nav === 'calendar' ? ' aria-current="page"' : '' %>>Calendar</a>
+        <a href="/announce"<%= nav === 'announce' ? ' aria-current="page"' : '' %>>Announce</a>
+        <a href="/settings"<%= nav === 'settings' ? ' aria-current="page"' : '' %>>Settings</a>
+      </nav>
+    <% } %>
+    <% (typeof flashes !== 'undefined' ? flashes : []).forEach(function (f) { %>
+      <div class="flash flash-<%= f.type === 'ok' ? 'ok' : (f.type === 'info' ? 'info' : 'error') %>" role="status"><%= f.message %></div>
+    <% }) %>

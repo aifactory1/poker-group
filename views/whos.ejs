@@ -1,0 +1,55 @@
+<%- include('partials/header') %>
+<section>
+  <div class="card">
+    <h2>Who's playing</h2>
+    <p class="muted">RSVPs and <strong>public</strong> messages only. Private messages to the organizer are never shown here.</p>
+    <% if (!game || !view) { %>
+      <p>There is no upcoming scheduled game right now.</p>
+    <% } else { %>
+      <p>
+        <strong>Game:</strong> <%= formatNiceDate(game.game_date) %><br />
+        <strong>Time:</strong> <%= formatTime12(game.start_time) %>–<%= formatTime12(game.end_time) %><br />
+        Confirmed people: <strong><%= view.tally.yesPeople %></strong> (need <%= view.tally.minimum %>)
+        <% if (view.tally.meetsMinimum) { %>
+          <span class="status-pill on">Looks like a game</span>
+        <% } else { %>
+          <span class="status-pill warn">Short so far</span>
+        <% } %>
+      </p>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Player</th>
+              <th scope="col">Status</th>
+              <th scope="col">Coming</th>
+              <th scope="col">Public message</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% view.rows.forEach(function (row) { %>
+              <tr>
+                <td><%= row.name %></td>
+                <td><%= row.status === 'unanswered' ? '—' : row.status %></td>
+                <td><%= row.coming != null ? row.coming : '—' %></td>
+                <td><%= row.publicMessage || '—' %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <h3>Public messages</h3>
+      <% var any = false; %>
+      <% view.rows.forEach(function (row) { %>
+        <% if (row.publicMessage) { any = true; %>
+          <div class="list-public-msg"><strong><%= row.name %>:</strong> <%= row.publicMessage %></div>
+        <% } %>
+      <% }) %>
+      <% if (!any) { %><p class="empty">No public messages yet.</p><% } %>
+    <% } %>
+    <div class="row-actions" style="margin-top:1rem">
+      <a class="btn btn-primary" href="/rsvp/<%= token %>">Back to your RSVP</a>
+    </div>
+  </div>
+</section>
+<%- include('partials/footer') %>

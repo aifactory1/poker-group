@@ -1,0 +1,79 @@
+<%- include('../partials/header') %>
+<section>
+  <div class="card">
+    <h2>Player admin</h2>
+    <p class="muted">Add, edit, or remove players. Each player gets a private RSVP link — no sign-in required.</p>
+    <form method="post" action="<%= editing ? '/players/' + editing.id : '/players' %>" novalidate>
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <div class="grid-2">
+        <label class="field">Name
+          <input type="text" name="name" required autocomplete="off" placeholder="Player name" value="<%= editing ? editing.name : '' %>" />
+        </label>
+        <label class="field">Email
+          <input type="email" name="email" required autocomplete="off" placeholder="name@example.com" value="<%= editing ? editing.email : '' %>" />
+        </label>
+      </div>
+      <div class="grid-2">
+        <label class="field">Phone <span class="hint">Optional — used later if SMS is enabled</span>
+          <input type="tel" name="phone" autocomplete="off" placeholder="(optional)" value="<%= editing && editing.phone ? editing.phone : '' %>" />
+        </label>
+        <label class="field">Active
+          <select name="active">
+            <option value="1" <%= !editing || editing.active ? 'selected' : '' %>>Active</option>
+            <option value="0" <%= editing && !editing.active ? 'selected' : '' %>>Inactive</option>
+          </select>
+        </label>
+      </div>
+      <div class="row-actions">
+        <button type="submit" class="btn btn-primary"><%= editing ? 'Save changes' : 'Add player' %></button>
+        <% if (editing) { %>
+          <a class="btn btn-secondary" href="/players">Cancel edit</a>
+        <% } %>
+      </div>
+    </form>
+    <div class="divider"></div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Contact</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (!players.length) { %>
+            <tr><td colspan="3" class="empty">No players yet.</td></tr>
+          <% } %>
+          <% players.forEach(function (p) { %>
+            <tr class="<%= p.active ? '' : 'inactive' %>">
+              <td>
+                <%= p.name %>
+                <% if (!p.active) { %><span class="sample-tag">Inactive</span><% } %>
+              </td>
+              <td>
+                <%= p.email %><br />
+                <span class="muted"><%= p.phone || 'No phone' %></span>
+              </td>
+              <td>
+                <div class="row-actions">
+                  <a class="btn btn-primary btn-sm" href="<%= rsvpUrl(p) %>">RSVP link</a>
+                  <a class="btn btn-secondary btn-sm" href="/players?edit=<%= p.id %>">Edit</a>
+                  <form method="post" action="/players/<%= p.id %>/rotate-token" onsubmit="return confirm('Create a new RSVP link? The old one will stop working.');">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                    <button type="submit" class="btn btn-secondary btn-sm">New link</button>
+                  </form>
+                  <form method="post" action="/players/<%= p.id %>/delete" onsubmit="return confirm('Delete <%= p.name %>? Their RSVPs will be removed.');">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+<%- include('../partials/footer') %>

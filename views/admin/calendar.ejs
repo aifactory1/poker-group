@@ -1,0 +1,129 @@
+<%- include('../partials/header') %>
+<section>
+  <div class="card">
+    <h2>Recurring Mondays</h2>
+    <p class="muted">Games are Mondays by default. Tap a date to select it (navy with a gold border). Use Skip or Restore to mark exceptions — selecting alone does not skip a night. U.S. federal holidays are computed for any year (including observed Mondays), not stored as a fixed list.</p>
+    <form method="post" action="/calendar/times">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="hidden" name="year" value="<%= year %>" />
+      <input type="hidden" name="month" value="<%= month %>" />
+      <% if (selected) { %><input type="hidden" name="date" value="<%= selected %>" /><% } %>
+      <div class="grid-2">
+        <label class="field">Default start time (Arizona)
+          <input type="time" name="default_start_time" value="<%= settings.default_start_time %>" />
+        </label>
+        <label class="field">Default end time (Arizona)
+          <input type="time" name="default_end_time" value="<%= settings.default_end_time %>" />
+        </label>
+      </div>
+      <div class="row-actions">
+        <button type="submit" class="btn btn-primary btn-sm">Save default game times</button>
+      </div>
+    </form>
+    <div class="cal-nav">
+      <a class="btn btn-secondary btn-sm" href="/calendar?year=<%= prev.year %>&amp;month=<%= prev.month %><%= selected ? '&amp;date=' + selected : '' %>" aria-label="Previous month">← Prev</a>
+      <h3><%= monthLabel %></h3>
+      <a class="btn btn-secondary btn-sm" href="/calendar?year=<%= next.year %>&amp;month=<%= next.month %><%= selected ? '&amp;date=' + selected : '' %>" aria-label="Next month">Next →</a>
+    </div>
+    <div class="legend">
+      <span><i class="swatch game"></i> Monday game</span>
+      <span><i class="swatch ex"></i> Skipped or cancelled</span>
+      <span><i class="swatch hol"></i> Holiday skip</span>
+      <span><i class="swatch sel"></i> Selected</span>
+    </div>
+    <div class="cal-month" role="grid" aria-label="Game calendar month">
+      <% ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function (d) { %>
+        <div class="cal-dow"><%= d %></div>
+      <% }) %>
+      <% days.forEach(function (cell) { %>
+        <% if (cell.pad) { %>
+          <div class="cal-day pad" aria-hidden="true"></div>
+        <% } else {
+          var classes = ['cal-day', 'in-month'];
+          if (cell.isToday) classes.push('today');
+          if (cell.selected) classes.push('selected');
+          if (cell.game && cell.game.status === 'scheduled') classes.push('monday-game');
+          if (cell.game && (cell.game.status === 'skipped' || cell.game.status === 'cancelled')) {
+            if (cell.holiday || (cell.game.skip_reason && cell.game.skip_reason.indexOf('Holiday:') === 0)) classes.push('holiday');
+            else classes.push('exception');
+          }
+          var href = '/calendar?year=' + year + '&month=' + month + '&date=' + cell.iso;
+        %>
+          <a class="<%= classes.join(' ') %>" href="<%= href %>" aria-selected="<%= cell.selected ? 'true' : 'false' %>" aria-label="<%= formatNiceDate(cell.iso) %>"><%= cell.day %></a>
+        <% } %>
+      <% }) %>
+    </div>
+    <div class="cal-selected-bar" aria-live="polite">
+      <% if (!selected) { %>
+        <div>Tap any date to select it. Selection is highlighted in navy with a gold border.</div>
+      <% } else { %>
+        <div><strong>Selected:</strong> <%= formatNiceDate(selected) %>
+          <% if (selectedGame) { %>
+            — <%= selectedGame.status %><% if (selectedGame.skip_reason) { %> (<%= selectedGame.skip_reason %>)<% } %>
+            · <%= formatTime12(selectedGame.start_time) %>–<%= formatTime12(selectedGame.end_time) %>
+          <% } else if (selectedHoliday) { %>
+            — <%= selectedHoliday.label %>
+          <% } else { %>
+            — not a Monday game night
+          <% } %>
+        </div>
+        <% if (selectedGame) { %>
+          <div class="row-actions">
+            <% if (selectedGame.status === 'scheduled') { %>
+              <form method="post" action="/calendar/skip">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <input type="hidden" name="date" value="<%= selected %>" />
+                <input type="hidden" name="year" value="<%= year %>" />
+                <input type="hidden" name="month" value="<%= month %>" />
+                <button type="submit" class="btn btn-danger btn-sm">Skip selected Monday (no game)</button>
+              </form>
+            <% } else { %>
+              <form method="post" action="/calendar/restore">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <input type="hidden" name="date" value="<%= selected %>" />
+                <input type="hidden" name="year" value="<%= year %>" />
+                <input type="hidden" name="month" value="<%= month %>" />
+                <button type="submit" class="btn btn-primary btn-sm">Restore game on selected Monday</button>
+              </form>
+            <% } %>
+          </div>
+          <form method="post" action="/calendar/times" style="margin-top:.75rem">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <input type="hidden" name="date" value="<%= selected %>" />
+            <input type="hidden" name="year" value="<%= year %>" />
+            <input type="hidden" name="month" value="<%= month %>" />
+            <div class="grid-2">
+              <label class="field">Start time this night
+                <input type="time" name="night_start" value="<%= selectedGame.start_time %>" />
+              </label>
+              <label class="field">End time this night
+                <input type="time" name="night_end" value="<%= selectedGame.end_time %>" />
+              </label>
+            </div>
+            <div class="row-actions">
+              <button type="submit" class="btn btn-secondary btn-sm">Save times for this Monday</button>
+            </div>
+          </form>
+        <% } %>
+      <% } %>
+    </div>
+    <h3>Upcoming scheduled nights</h3>
+    <ul class="check-list">
+      <% upcoming.forEach(function (g) { %>
+        <li>
+          <% if (g.status === 'scheduled') { %>
+            <span>♠</span>
+            <span>
+              <strong><%= formatNiceDate(g.game_date) %></strong>
+              · <%= formatTime12(g.start_time) %>–<%= formatTime12(g.end_time) %>
+            </span>
+          <% } else { %>
+            <span>○</span>
+            <span class="muted"><%= formatNiceDate(g.game_date) %> — <%= g.status %><% if (g.skip_reason) { %> (<%= g.skip_reason %>)<% } %></span>
+          <% } %>
+        </li>
+      <% }) %>
+    </ul>
+  </div>
+</section>
+<%- include('../partials/footer') %>

@@ -1,0 +1,69 @@
+<%- include('../partials/header') %>
+<section>
+  <div class="card">
+    <h2>Announcements</h2>
+    <p class="muted">Compose a message and choose recipients. Phase 1 shows a preview and writes a send log — <strong>no email or text is actually sent</strong>.</p>
+    <% if (game) { %>
+      <p>Next game: <strong><%= formatNiceDate(game.game_date) %></strong> · <%= formatTime12(game.start_time) %>–<%= formatTime12(game.end_time) %></p>
+    <% } %>
+    <form method="post" action="/announce/preview">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <label class="field">Send to
+        <select name="audience" aria-label="Announcement audience">
+          <option value="yes" <%= audience === 'yes' ? 'selected' : '' %>>People coming (Yes)</option>
+          <option value="no" <%= audience === 'no' ? 'selected' : '' %>>People not coming (No)</option>
+          <option value="all" <%= audience === 'all' ? 'selected' : '' %>>Everyone in the group</option>
+        </select>
+      </label>
+      <p class="muted" aria-live="polite"><strong><%= preview.count %></strong> recipient<%= preview.count === 1 ? '' : 's' %>.</p>
+      <label class="field">Subject
+        <input type="text" name="subject" value="<%= subject %>" />
+      </label>
+      <label class="field">Message
+        <textarea name="body"><%= body %></textarea>
+      </label>
+      <div class="row-actions">
+        <button type="submit" class="btn btn-secondary" formaction="/announce/preview">Preview recipients</button>
+        <button type="submit" class="btn btn-primary" formaction="/announce/send">Simulate send</button>
+      </div>
+    </form>
+    <h3>Preview recipients</h3>
+    <% if (!preview.recipients.length) { %>
+      <p class="empty">No one in this audience yet.</p>
+    <% } else { %>
+      <ul class="check-list">
+        <% preview.recipients.forEach(function (p) { %>
+          <li><span>♠</span><span><%= p.name %> · <%= p.email %></span></li>
+        <% }) %>
+      </ul>
+    <% } %>
+    <% if (history.length) { %>
+      <h3>Recent (logged only)</h3>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">When</th>
+              <th scope="col">Audience</th>
+              <th scope="col">Subject</th>
+              <th scope="col">Recipients</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% history.forEach(function (a) { %>
+              <tr>
+                <td><%= a.sent_at || a.created_at %></td>
+                <td><%= a.audience %></td>
+                <td><%= a.subject %></td>
+                <td><%= a.recipient_count %></td>
+                <td><%= a.status %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</section>
+<%- include('../partials/footer') %>

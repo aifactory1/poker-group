@@ -1,0 +1,121 @@
+'use strict';
+
+process.env.NODE_ENV = 'test';
+process.env.ADMIN_PASSWORD = 'test-password-123';
+
+
+const { describe, it, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+const { openDatabase, resetDbHandle, getDb } = require('../src/db');
+const { seed } = require('../src/seed');
+const { openTestDatabase, closeTestDatabase } = require('./db-helper');
+const svc = require('../src/services');
+const { holidayOnDate } = require('../src/holidays');
+
+describe('services: players, calendar, RSVP, tallies', () => {
+  before(async () => {
+    process.env.NODE_ENV = 'test';
+    process.env.ADMIN_PASSWORD = 'test-password-123';
+    await openTestDatabase();
+    await seed();
+  });
+
+  after(async () => {
+    await closeTestDatabase();
+  });
+
+  it('seeds sample players and an organizer', async () => {
+    const players = await svc.listPlayers();
+    assert.ok(players.length >= 7);
+    assert.ok(players.every((p) => p.email.endsWith('@example.com')));
+    assert.ok(players.every((p) => p.rsvp_token));
+    const admin = await getDb().get('SELECT * FROM admin_users WHERE email = ?', ['eric@example.com']);
+    assert.ok(admin);
+    assert.ok(admin.password_hash.startsWith('$2'));
+  });
+
+  it('supports player CRUD', async () => {
+    const created = await svc.createPlayer({ name: 'Pat', email: 'pat@example.com', phone: '555-0100' });
+    assert.equal(created.name, 'Pat');
+    const updated = await svc.updatePlayer(created.id, { name: 'Patricia', email: 'pat@example.com', phone: '555-0101', active: true });
+    assert.equal(updated.name, 'Patricia');
+    await svc.deletePlayer(created.id);
+    assert.equal(await svc.getPlayer(created.id), undefined);
+  });
+
+  it('rejects duplicate emails', async () => {
+    await assert.rejects(() => svc.createPlayer({ name: 'Dup', email: 'eric@example.com' }), /already exists/);
+  });
+
+  it('skips and restores a Monday and auto-skips computed holidays', async () => {
+    const game = await svc.nextScheduledGame();
+    assert.ok(game);
+    assert.equal(game.status, 'scheduled');
+
+    const skipped = await svc.skipGame(game.game_date, 'Organizer skipped');
+    assert.equal(skipped.status, 'skipped');
+    const restored = await svc.restoreGame(game.game_date);
+    assert.equal(restored.status, 'scheduled');
+    assert.equal(restored.skip_reason, null);
+
+    const mlk = '2026-01-19';
+    const night = await svc.ensureGameNight(mlk);
+    assert.equal(night.status, 'skipped');
+    assert.match(night.skip_reason, /Martin Luther King/);
+    assert.ok(holidayOnDate(mlk));
+  });
+
+  it('counts guests toward the minimum and ignores maybe', async () => {
+    const game = await svc.nextScheduledGame();
+    const t = await svc.tallyForGame(game);
+    // Seed: Eric 1 + Mike 2 + Dave 1 = 4 yes people; Tom maybe; Joe no; Sam/Chris unanswered
+    assert.equal(t.yesPeople, 4);
+    assert.equal(t.yesPlayers, 3);
+    assert.equal(t.maybe, 1);
+    assert.equal(t.no, 1);
+    assert.equal(t.unanswered, 2);
+    assert.equal(t.meetsMinimum, false);
+    assert.equal(t.minimum, 5);
+  });
+
+  it('saves an RSVP via token data and hides organizer-only messages', async () => {
+    const game = await svc.nextScheduledGame();
+    const sam = await svc.getPlayerByEmail('sam@example.com');
+    await svc.saveRsvp(sam.id, game.id, {
+      status: 'yes',
+      party_size: 2,
+      message: 'Secret note to Eric',
+      message_visibility: 'organizer',
+    });
+    const t = await svc.tallyForGame(game);
+    assert.equal(t.yesPeople, 6); // 4 + Sam and guest
+    assert.equal(t.meetsMinimum, true);
+
+    const view = await svc.publicWhosPlaying(game);
+    const samRow = view.rows.find((r) => r.name === 'Sam');
+    assert.equal(samRow.status, 'yes');
+    assert.equal(samRow.coming, 2);
+    assert.equal(samRow.publicMessage, '');
+
+    const eric = view.rows.find((r) => r.name.startsWith('Eric'));
+    assert.equal(eric.publicMessage, 'Hosting as usual.');
+
+    const tom = view.rows.find((r) => r.name === 'Tom');
+    assert.equal(tom.status, 'maybe');
+    assert.equal(tom.publicMessage, ''); // "Might be late." is organizer-only
+  });
+
+  it('auto-cancel stub cancels when under minimum after cutoff and only logs', async () => {
+    const freshDate = '2026-11-30'; // a Monday after the seeded next game (2026-11-16)
+    const night = await svc.ensureGameNight(freshDate);
+    if (night.status !== 'scheduled') await svc.restoreGame(freshDate);
+    const afterCutoff = new Date('2026-11-30T16:05:00-07:00');
+    const result = await svc.runAutoCancelJob(afterCutoff);
+    assert.equal(result.ok, true);
+    assert.equal(result.cancelled, true);
+    assert.equal(result.stub, true);
+    assert.equal((await svc.getGameByDate(freshDate)).status, 'cancelled');
+    const logs = await getDb().all("SELECT * FROM job_logs WHERE job_type IN ('auto_cancel_job', 'email')");
+    assert.ok(logs.length > 0);
+  });
+});

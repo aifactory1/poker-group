@@ -3,7 +3,7 @@
   <div class="card">
     <h2>Player admin</h2>
     <p class="muted">Add, edit, or remove players. Each player gets a private RSVP link — no sign-in required.</p>
-    <form method="post" action="<%= editing ? '/players/' + editing.id : '/players' %>" novalidate>
+    <form id="player-form" method="post" action="<%= editing ? '/players/' + editing.id : '/players' %>" novalidate>
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <div class="grid-2">
         <label class="field">Name
@@ -31,6 +31,17 @@
         <% } %>
       </div>
     </form>
+    <% if (editing) { %>
+      <div class="link-tools">
+        <p class="muted" style="margin:0 0 .35rem">Private RSVP link for <%= editing.name %>:</p>
+        <p class="copy-link" style="margin:0 0 .5rem"><a href="<%= rsvpUrl(editing) %>"><%= rsvpUrl(editing) %></a></p>
+        <form method="post" action="/players/<%= editing.id %>/rotate-token" onsubmit="return confirm('Create a new RSVP link? The old one will stop working. Only needed if a link was forwarded or shared.');">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <button type="submit" class="btn btn-quiet btn-sm">Create a new RSVP link</button>
+        </form>
+        <p class="hint">Only needed if a link was forwarded or shared.</p>
+      </div>
+    <% } %>
     <div class="divider"></div>
     <div style="overflow-x:auto">
       <table>
@@ -58,11 +69,7 @@
               <td>
                 <div class="row-actions">
                   <a class="btn btn-primary btn-sm" href="<%= rsvpUrl(p) %>">RSVP link</a>
-                  <a class="btn btn-secondary btn-sm" href="/players?edit=<%= p.id %>">Edit</a>
-                  <form method="post" action="/players/<%= p.id %>/rotate-token" onsubmit="return confirm('Create a new RSVP link? The old one will stop working.');">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                    <button type="submit" class="btn btn-secondary btn-sm">New link</button>
-                  </form>
+                  <a class="btn btn-secondary btn-sm" href="/players?edit=<%= p.id %>#player-form">Edit</a>
                   <form method="post" action="/players/<%= p.id %>/delete" onsubmit="return confirm('Delete <%= p.name %>? Their RSVPs will be removed.');">
                     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                     <button type="submit" class="btn btn-danger btn-sm">Delete</button>

@@ -18,6 +18,13 @@ const notify = require('../notify');
 
 const router = express.Router();
 
+function rejectPastGameDate(date) {
+  if (!date) return;
+  if (String(date) < todayISO()) {
+    throw Object.assign(new Error('Past dates cannot be edited.'), { status: 400 });
+  }
+}
+
 router.use(auth.requireAdmin);
 router.use(auth.requireCsrf);
 
@@ -107,7 +114,7 @@ router.post('/players/:id/rotate-token', async (req, res) => {
   } catch (err) {
     req.flash('error', err.message);
   }
-  res.redirect('/players');
+  res.redirect('/players?edit=' + encodeURIComponent(req.params.id) + '#player-form');
 });
 
 router.get('/calendar', async (req, res) => {
@@ -124,7 +131,8 @@ router.get('/calendar', async (req, res) => {
     year += 1;
   }
   await svc.gamesInMonth(year, month);
-  const selected = req.query.date || null;
+  const requested = req.query.date || null;
+  const selected = requested && requested >= today ? requested : null;
   const selectedGame = selected ? await svc.getGameByDate(selected) : null;
   const selectedHoliday = selected ? holidayOnDate(selected) : null;
   const startPad = weekdayUTC(year + '-' + String(month).padStart(2, '0') + '-01');
@@ -135,13 +143,15 @@ router.get('/calendar', async (req, res) => {
     const iso = year + '-' + String(month).padStart(2, '0') + '-' + String(d).padStart(2, '0');
     const game = weekdayUTC(iso) === 1 ? await svc.getGameByDate(iso) : null;
     const hol = holidayOnDate(iso);
+    const isPast = iso < today;
     days.push({
       pad: false,
       iso,
       day: d,
       isMonday: weekdayUTC(iso) === 1,
       isToday: iso === today,
-      selected: iso === selected,
+      isPast,
+      selected: !isPast && iso === selected,
       game,
       holiday: hol,
     });
@@ -176,13 +186,14 @@ router.post('/calendar/skip', async (req, res) => {
   const month = req.body.month;
   try {
     if (!date) throw Object.assign(new Error('Select a date first'), { status: 400 });
+    rejectPastGameDate(date);
     const hol = holidayOnDate(date);
     await svc.skipGame(date, hol ? svc.holidaySkipReason(hol) : 'Organizer skipped');
     req.flash('ok', 'No game on ' + formatNiceDate(date) + '.');
   } catch (err) {
     req.flash('error', err.message);
   }
-  res.redirect('/calendar?year=' + year + '&month=' + month + '&date=' + encodeURIComponent(date || ''));
+  res.redirect('/calendar?year=' + year + '&month=' + month + '#calendar');
 });
 
 router.post('/calendar/restore', async (req, res) => {
@@ -191,12 +202,13 @@ router.post('/calendar/restore', async (req, res) => {
   const month = req.body.month;
   try {
     if (!date) throw Object.assign(new Error('Select a date first'), { status: 400 });
+    rejectPastGameDate(date);
     await svc.restoreGame(date);
     req.flash('ok', 'Game restored on ' + formatNiceDate(date) + '.');
   } catch (err) {
     req.flash('error', err.message);
   }
-  res.redirect('/calendar?year=' + year + '&month=' + month + '&date=' + encodeURIComponent(date || ''));
+  res.redirect('/calendar?year=' + year + '&month=' + month + '#calendar');
 });
 
 router.post('/calendar/times', async (req, res) => {
@@ -205,6 +217,7 @@ router.post('/calendar/times', async (req, res) => {
   const month = req.body.month;
   try {
     if (date && req.body.night_start && req.body.night_end) {
+      rejectPastGameDate(date);
       await svc.updateGameTimes(date, req.body.night_start, req.body.night_end);
       req.flash('ok', 'Times updated for ' + formatNiceDate(date) + '.');
     } else if (req.body.default_start_time && req.body.default_end_time) {
@@ -218,7 +231,7 @@ router.post('/calendar/times', async (req, res) => {
   } catch (err) {
     req.flash('error', err.message);
   }
-  const q = '/calendar?year=' + year + '&month=' + month + (date ? '&date=' + encodeURIComponent(date) : '');
+  const q = '/calendar?year=' + year + '&month=' + month + '#calendar';
   res.redirect(q);
 });
 

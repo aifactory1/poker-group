@@ -2,12 +2,11 @@
 <section>
   <div class="card">
     <h2>Recurring Mondays</h2>
-    <p class="muted">Games are Mondays by default. Tap a date to select it (navy with a gold border). Use Skip or Restore to mark exceptions — selecting alone does not skip a night. U.S. federal holidays are computed for any year (including observed Mondays), not stored as a fixed list.</p>
-    <form method="post" action="/calendar/times">
+    <p class="muted">Games are Mondays by default. Tap a date to select it (navy with a gold border) and to jump to Skip or time changes. Selecting alone does not skip a night. Past dates are grayed out and cannot be edited. U.S. federal holidays and major Jewish holidays are computed for any year. Jewish holidays begin at sundown the evening before, so a Monday is flagged when the holiday falls that day or starts that evening. Holiday Mondays start as suggested skips and can be restored.</p>
+    <form method="post" action="/calendar/times" id="cal-defaults">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <input type="hidden" name="year" value="<%= year %>" />
       <input type="hidden" name="month" value="<%= month %>" />
-      <% if (selected) { %><input type="hidden" name="date" value="<%= selected %>" /><% } %>
       <div class="grid-2">
         <label class="field">Default start time (Arizona)
           <input type="time" name="default_start_time" value="<%= settings.default_start_time %>" />
@@ -20,16 +19,17 @@
         <button type="submit" class="btn btn-primary btn-sm">Save default game times</button>
       </div>
     </form>
-    <div class="cal-nav">
-      <a class="btn btn-secondary btn-sm" href="/calendar?year=<%= prev.year %>&amp;month=<%= prev.month %><%= selected ? '&amp;date=' + selected : '' %>" aria-label="Previous month">← Prev</a>
+    <div class="cal-nav" id="calendar">
+      <a class="btn btn-secondary btn-sm" href="/calendar?year=<%= prev.year %>&amp;month=<%= prev.month %>#calendar" aria-label="Previous month">← Prev</a>
       <h3><%= monthLabel %></h3>
-      <a class="btn btn-secondary btn-sm" href="/calendar?year=<%= next.year %>&amp;month=<%= next.month %><%= selected ? '&amp;date=' + selected : '' %>" aria-label="Next month">Next →</a>
+      <a class="btn btn-secondary btn-sm" href="/calendar?year=<%= next.year %>&amp;month=<%= next.month %>#calendar" aria-label="Next month">Next →</a>
     </div>
     <div class="legend">
       <span><i class="swatch game"></i> Monday game</span>
       <span><i class="swatch ex"></i> Skipped or cancelled</span>
-      <span><i class="swatch hol"></i> Holiday skip</span>
+      <span><i class="swatch hol"></i> Holiday</span>
       <span><i class="swatch sel"></i> Selected</span>
+      <span><i class="swatch past"></i> Past</span>
     </div>
     <div class="cal-month" role="grid" aria-label="Game calendar month">
       <% ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function (d) { %>
@@ -41,21 +41,30 @@
         <% } else {
           var classes = ['cal-day', 'in-month'];
           if (cell.isToday) classes.push('today');
+          if (cell.isPast) classes.push('past');
           if (cell.selected) classes.push('selected');
+          if (cell.holiday) classes.push('has-holiday');
           if (cell.game && cell.game.status === 'scheduled') classes.push('monday-game');
           if (cell.game && (cell.game.status === 'skipped' || cell.game.status === 'cancelled')) {
             if (cell.holiday || (cell.game.skip_reason && cell.game.skip_reason.indexOf('Holiday:') === 0)) classes.push('holiday');
             else classes.push('exception');
           }
-          var href = '/calendar?year=' + year + '&month=' + month + '&date=' + cell.iso;
+          var labelBits = [formatNiceDate(cell.iso)];
+          if (cell.holiday) labelBits.push(cell.holiday.label);
+          if (cell.isPast) labelBits.push('past date');
+          var aria = labelBits.join(', ');
         %>
-          <a class="<%= classes.join(' ') %>" href="<%= href %>" aria-selected="<%= cell.selected ? 'true' : 'false' %>" aria-label="<%= formatNiceDate(cell.iso) %>"><%= cell.day %></a>
+          <% if (cell.isPast) { %>
+            <div class="<%= classes.join(' ') %>" aria-disabled="true" aria-label="<%= aria %>"><span class="cal-num"><%= cell.day %></span><% if (cell.holiday) { %><span class="cal-hol-label"><%= cell.holiday.shortLabel %></span><% } %></div>
+          <% } else { %>
+            <a class="<%= classes.join(' ') %>" href="/calendar?year=<%= year %>&amp;month=<%= month %>&amp;date=<%= cell.iso %>#cal-details" aria-selected="<%= cell.selected ? 'true' : 'false' %>" aria-label="<%= aria %>"><span class="cal-num"><%= cell.day %></span><% if (cell.holiday) { %><span class="cal-hol-label"><%= cell.holiday.shortLabel %></span><% } %></a>
+          <% } %>
         <% } %>
       <% }) %>
     </div>
-    <div class="cal-selected-bar" aria-live="polite">
+    <div class="cal-selected-bar" id="cal-details" tabindex="-1" aria-live="polite">
       <% if (!selected) { %>
-        <div>Tap any date to select it. Selection is highlighted in navy with a gold border.</div>
+        <div>Tap a future date to select it and jump here to skip a Monday or change the time. Past dates are grayed out.</div>
       <% } else { %>
         <div><strong>Selected:</strong> <%= formatNiceDate(selected) %>
           <% if (selectedGame) { %>
@@ -67,6 +76,11 @@
             — not a Monday game night
           <% } %>
         </div>
+        <% if (selectedHoliday && selectedGame) { %>
+          <p class="muted" style="margin:.4rem 0 0">Holiday: <%= selectedHoliday.label %>. This is a suggested skip — you can restore the game if you still want to play.</p>
+        <% } else if (selectedHoliday) { %>
+          <p class="muted" style="margin:.4rem 0 0">Holiday: <%= selectedHoliday.label %></p>
+        <% } %>
         <% if (selectedGame) { %>
           <div class="row-actions">
             <% if (selectedGame.status === 'scheduled') { %>

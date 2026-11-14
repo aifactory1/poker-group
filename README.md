@@ -9,7 +9,7 @@ Phase 1 runs entirely on your computer (or later on a host such as Railway). **N
 - Organizer login (single admin, hashed password, session cookie)
 - Player add / edit / delete, optional phone, private RSVP token per player
 - Recurring Monday calendar: skip or restore a night, edit times
-- U.S. federal holidays are **computed** for any year (including weekend observance). Holiday Mondays start as skipped and can be restored
+- U.S. federal holidays and major Jewish holidays are **computed** for any year (including weekend observance, and Jewish holidays that start at sundown the evening before). Holiday Mondays start as suggested skips and can be restored
 - Private RSVP page (no sign-in): Yes / No / Maybe, party size, optional message, visibility “Only the organizer” (default) or “Everyone in Poker Group”
 - “Who’s playing” view shows public messages only
 - Dashboard tallies for the next scheduled game. Guests count toward the minimum; Maybe does not

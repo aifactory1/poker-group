@@ -2,6 +2,9 @@
 <section>
   <div class="card">
     <h2>RSVP</h2>
+    <% if (typeof admin !== 'undefined' && admin) { %>
+      <p class="row-actions" style="margin:.25rem 0 .75rem"><a class="btn btn-secondary" href="/">Back to dashboard</a></p>
+    <% } %>
     <p class="muted">Hi <%= player.name %>. This is your private link — no sign-in needed. You can change your answer later with the same link.</p>
     <% if (!game) { %>
       <p>There is no upcoming scheduled game right now.</p>

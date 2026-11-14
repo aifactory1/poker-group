@@ -119,7 +119,9 @@ describe('HTTP flows', () => {
     const [y, m] = game.game_date.split('-');
     page = await c.get('/calendar?year=' + y + '&month=' + Number(m) + '&date=' + game.game_date);
     assert.match(page.text, /Skip selected Monday/);
-    await c.post('/calendar/skip', { _csrf: csrfFrom(page.text), date: game.game_date, year: y, month: Number(m) });
+    const skipped = await c.post('/calendar/skip', { _csrf: csrfFrom(page.text), date: game.game_date, year: y, month: Number(m) });
+    assert.match(skipped.res.headers.get('location') || '', /#calendar/);
+    assert.doesNotMatch(skipped.res.headers.get('location') || '', /[?&]date=/);
     assert.equal((await svc.getGameByDate(game.game_date)).status, 'skipped');
     page = await c.get('/calendar?year=' + y + '&month=' + Number(m) + '&date=' + game.game_date);
     await c.post('/calendar/restore', { _csrf: csrfFrom(page.text), date: game.game_date, year: y, month: Number(m) });
@@ -174,7 +176,54 @@ describe('HTTP flows', () => {
     assert.match(sid, /Secure/i);
   });
 
+  it('calendar, RSVP, and player pages reflect organizer phone-testing fixes', async () => {
+    const c = new Client();
+    let page = await c.get('/login');
+    await c.post('/login', { _csrf: csrfFrom(page.text), email: 'eric@example.com', password: 'test-password-123', next: '/' });
+
+    const header = await c.get('/');
+    assert.doesNotMatch(header.text, /Nickel-dime Mondays/);
+
+    const players = await c.get('/players');
+    assert.doesNotMatch(players.text, />New link</);
+    assert.match(players.text, /href="\/players\?edit=\d+#player-form"/);
+
+    const mike = await svc.getPlayerByEmail('mike@example.com');
+    const edit = await c.get('/players?edit=' + mike.id);
+    assert.match(edit.text, /Only needed if a link was forwarded or shared/);
+    assert.match(edit.text, /Create a new RSVP link/);
+
+    const cal = await c.get('/calendar?year=2026&month=9');
+    assert.equal(cal.res.status, 200);
+    assert.match(cal.text, /Yom Kippur/);
+
+    const oldCal = await c.get('/calendar?year=2020&month=1');
+    assert.match(oldCal.text, /class="[^"]*\bpast\b/);
+    assert.doesNotMatch(oldCal.text, /href="\/calendar\?year=2020&amp;month=1&amp;date=2020-01-06#cal-details"/);
+
+    const far = await c.get('/calendar?year=2027&month=12');
+    assert.match(far.text, /#cal-details/);
+    assert.match(far.text, /Hanukkah/);
+    const selected = await c.get('/calendar?year=2027&month=12&date=2027-12-24#cal-details');
+    assert.match(selected.text, /id="cal-details"/);
+    assert.match(selected.text, /Hanukkah \(first night\)/);
+    assert.match(selected.text, /Selected:/);
+
+    const chris = await svc.getPlayerByEmail('chris@example.com');
+    const rsvpAsAdmin = await c.get('/rsvp/' + chris.rsvp_token);
+    assert.match(rsvpAsAdmin.text, /<title>RSVP — Poker Group<\/title>/);
+    assert.doesNotMatch(rsvpAsAdmin.text, /RSVP — Poker Group — Poker Group/);
+    assert.match(rsvpAsAdmin.text, /Back to dashboard/);
+
+    const guest = new Client();
+    const rsvpAsPlayer = await guest.get('/rsvp/' + chris.rsvp_token);
+    assert.match(rsvpAsPlayer.text, /<title>RSVP — Poker Group<\/title>/);
+    assert.doesNotMatch(rsvpAsPlayer.text, /Back to dashboard/);
+    assert.doesNotMatch(rsvpAsPlayer.text, /Nickel-dime Mondays/);
+  });
+
   it('lets the organizer set a password through a one-time setup link', async () => {
+
     const created = await setupToken.ensureSetupToken({ force: true });
     assert.ok(created.token);
     const token = created.token;

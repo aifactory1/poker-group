@@ -56,4 +56,85 @@
 
   var flash = document.querySelector('.flash-ok, .flash-error, .flash-info');
   if (flash) toast(flash.textContent);
+
+  var SCROLL_KEY = 'poker-group-scroll';
+
+  function scrollToHash() {
+    if (!location.hash || location.hash.length < 2) return false;
+    var el = document.getElementById(location.hash.slice(1));
+    if (!el) return false;
+    el.scrollIntoView({ block: 'start', behavior: 'auto', inline: 'nearest' });
+    if (typeof el.focus === 'function') {
+      try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+    }
+    var focusable = el.querySelector('input, select, textarea, button');
+    if (focusable && document.activeElement === el) {
+      try { focusable.focus({ preventScroll: true }); } catch (e) { focusable.focus(); }
+    }
+    return true;
+  }
+
+  function restoreScroll() {
+    if (scrollToHash()) {
+      try { sessionStorage.removeItem(SCROLL_KEY); } catch (e) {}
+      return;
+    }
+    var saved;
+    try { saved = JSON.parse(sessionStorage.getItem(SCROLL_KEY) || 'null'); } catch (e) { saved = null; }
+    if (!saved || !saved.path || saved.path !== location.pathname) return;
+    if (Date.now() - (saved.t || 0) > 60000) {
+      try { sessionStorage.removeItem(SCROLL_KEY); } catch (e) {}
+      return;
+    }
+    var y = Number(saved.y);
+    if (!isFinite(y)) return;
+    window.scrollTo(0, y);
+    try { sessionStorage.removeItem(SCROLL_KEY); } catch (e) {}
+  }
+
+  function saveScrollForPath(pathname) {
+    try {
+      sessionStorage.setItem(SCROLL_KEY, JSON.stringify({
+        path: pathname,
+        y: window.scrollY || window.pageYOffset || 0,
+        t: Date.now()
+      }));
+    } catch (e) {}
+  }
+
+  document.querySelectorAll('form').forEach(function (f) {
+    f.addEventListener('submit', function () {
+      var action = f.getAttribute('action') || location.pathname;
+      var dest = location.pathname;
+      try {
+        dest = new URL(action, location.href).pathname;
+        // Most posts redirect back to the current page (or a parent like /players).
+        if (dest === location.pathname || dest.indexOf(location.pathname) === 0 || location.pathname.indexOf(dest) === 0) {
+          dest = dest === location.pathname ? location.pathname : (dest.indexOf(location.pathname) === 0 ? location.pathname : dest);
+        }
+      } catch (e) {}
+      // Prefer the current page: calendar and settings posts stay on the same path.
+      if (dest.indexOf('/calendar') === 0) dest = '/calendar';
+      else if (dest.indexOf('/players') === 0) dest = '/players';
+      else if (dest.indexOf('/settings') === 0) dest = '/settings';
+      else if (dest.indexOf('/announce') === 0) dest = '/announce';
+      else if (dest.indexOf('/rsvp/') === 0) dest = location.pathname;
+      else if (dest !== location.pathname && dest !== '/login' && dest !== '/logout') {
+        // keep dest
+      } else {
+        dest = location.pathname;
+      }
+      if (dest === '/login' || dest === '/logout' || dest.indexOf('/setup/') === 0) return;
+      saveScrollForPath(dest);
+    });
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', restoreScroll);
+  } else {
+    restoreScroll();
+  }
+  window.addEventListener('pageshow', function (ev) {
+    if (ev.persisted) restoreScroll();
+  });
 })();

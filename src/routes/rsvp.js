@@ -24,7 +24,7 @@ async function loadRsvpContext(req, res, next) {
 router.get('/rsvp/:token', loadRsvpContext, async (req, res) => {
   const rsvp = req.game ? await svc.getRsvp(req.player.id, req.game.id) : null;
   res.render('rsvp', {
-    title: 'RSVP — ' + ((await svc.getSettings()).group_name),
+    title: 'RSVP',
     layout: 'player',
     player: req.player,
     game: req.game,

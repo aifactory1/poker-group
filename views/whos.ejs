@@ -2,6 +2,9 @@
 <section>
   <div class="card">
     <h2>Who's playing</h2>
+    <% if (typeof admin !== 'undefined' && admin) { %>
+      <p class="row-actions" style="margin:.25rem 0 .75rem"><a class="btn btn-secondary" href="/">Back to dashboard</a></p>
+    <% } %>
     <p class="muted">RSVPs and <strong>public</strong> messages only. Private messages to the organizer are never shown here.</p>
     <% if (!game || !view) { %>
       <p>There is no upcoming scheduled game right now.</p>

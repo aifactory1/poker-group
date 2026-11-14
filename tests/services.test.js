@@ -63,6 +63,16 @@ describe('services: players, calendar, RSVP, tallies', () => {
     assert.equal(night.status, 'skipped');
     assert.match(night.skip_reason, /Martin Luther King/);
     assert.ok(holidayOnDate(mlk));
+
+    const yomKippur = '2026-09-21'; // Monday
+    const ykNight = await svc.ensureGameNight(yomKippur);
+    assert.equal(ykNight.status, 'skipped');
+    assert.match(ykNight.skip_reason, /Yom Kippur/);
+
+    const erevPurim = '2027-03-22'; // Monday evening start
+    const purimNight = await svc.ensureGameNight(erevPurim);
+    assert.equal(purimNight.status, 'skipped');
+    assert.match(purimNight.skip_reason, /Purim/);
   });
 
   it('counts guests toward the minimum and ignores maybe', async () => {

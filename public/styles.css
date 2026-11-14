@@ -18,7 +18,7 @@
       --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
     }
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: auto; }
     body {
       margin: 0;
       font-family: var(--font);
@@ -175,15 +175,22 @@
       text-align: center; font-size: .92rem; display: none;
     }
     .toast.show { display: block; animation: fade .2s ease; }
-    .cal-month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: .5rem; }
+    .cal-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-top: .5rem; }
     .cal-dow { text-align: center; font-size: .72rem; font-weight: 700; color: #777; padding: .25rem 0; text-transform: uppercase; }
     .cal-day {
       aspect-ratio: 1; border-radius: 10px; border: 2px solid #e0d7c4; background: #fff;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      font-size: .9rem; font-weight: 700; cursor: default; color: #999;
-      min-height: 44px; min-width: 44px; padding: 0;
+      font-size: .85rem; font-weight: 700; cursor: default; color: #999;
+      min-height: 40px; min-width: 0; padding: 2px 1px;
       touch-action: manipulation; -webkit-tap-highlight-color: transparent;
       user-select: none; appearance: none; font-family: inherit;
+      overflow: hidden;
+    }
+    .cal-num { line-height: 1.1; }
+    .cal-hol-label {
+      display: block; font-size: .5rem; font-weight: 700; line-height: 1.15;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      margin-top: 1px; letter-spacing: -.02em; opacity: .95;
     }
     .cal-day.in-month { color: var(--ink); cursor: pointer; background: #fff; }
     .cal-day.in-month:hover, .cal-day.in-month:focus-visible {
@@ -217,7 +224,45 @@
       background: #ffcdd2;
     }
     .cal-day.selected.holiday::after { background: #ffe082; }
-    .cal-day.pad { visibility: hidden; pointer-events: none; border: none; background: transparent; min-height: 44px; }
+    .cal-day.pad { visibility: hidden; pointer-events: none; border: none; background: transparent; min-height: 40px; }
+    .cal-day.has-holiday:not(.selected):not(.past):not(.monday-game):not(.exception):not(.holiday) {
+      background: #fff6d8; border-color: #d4a017;
+    }
+    .cal-day.past {
+      background: #ece8df !important;
+      color: #8a8478 !important;
+      cursor: default;
+      pointer-events: none;
+      opacity: .62;
+      filter: grayscale(.4);
+      box-shadow: none !important;
+      transform: none !important;
+      text-decoration: none !important;
+    }
+    .cal-day.past.monday-game { background: #9bbfa8 !important; }
+    .cal-day.past.exception { background: #c9a8a4 !important; }
+    .cal-day.past.holiday, .cal-day.past.has-holiday { background: #d9cba0 !important; }
+    #calendar, #cal-details, #player-form, #cal-defaults { scroll-margin-top: 4.25rem; }
+    .link-tools {
+      margin-top: .85rem; padding: .75rem .85rem; border-radius: 12px;
+      background: #f4f0e6; border: 1px solid #e0d7c4;
+    }
+    .link-tools .hint { margin: .35rem 0 0; font-size: .8rem; color: #666; }
+    .btn-quiet {
+      background: transparent; color: #555; border: 1px solid #d0c6b0;
+      font-weight: 600;
+    }
+    .btn-quiet:hover { background: #ebe3d1; }
+    .swatch.past { background: #ece8df; border-color: #cfc5b0; }
+    @media (max-width: 400px) {
+      .wrap { padding-left: .6rem; padding-right: .6rem; }
+      .card { padding: .85rem .7rem; }
+      .cal-month { gap: 3px; }
+      .cal-day { min-height: 38px; border-radius: 7px; font-size: .78rem; border-width: 1px; }
+      .cal-dow { font-size: .6rem; padding: .1rem 0; }
+      .cal-hol-label { font-size: .45rem; }
+      .cal-nav h3 { font-size: .95rem; }
+    }
     .cal-nav { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .35rem; }
     .cal-nav h3 { margin: 0; color: var(--felt-dark); }
     .legend { display: flex; flex-wrap: wrap; gap: .6rem; margin: .75rem 0; font-size: .82rem; }

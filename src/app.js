@@ -37,7 +37,7 @@ function createApp() {
     })
   );
 
-  app.use((req, res, next) => {
+  app.use(async (req, res, next) => {
     const flashes = req.session.flashes || [];
     req.session.flashes = [];
     res.locals.flashes = flashes;
@@ -46,6 +46,17 @@ function createApp() {
     res.locals.currentPath = req.path;
     res.locals.isProd = config.nodeEnv === 'production';
     res.locals.admin = null;
+    if (req.session && req.session.adminId) {
+      try {
+        const admin = await auth.getAdminById(req.session.adminId);
+        if (admin) {
+          req.admin = admin;
+          res.locals.admin = admin;
+        }
+      } catch (err) {
+        return next(err);
+      }
+    }
     next();
   });
 

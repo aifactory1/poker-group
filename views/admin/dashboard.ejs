@@ -51,49 +51,80 @@
         </div>
       <% } %>
       <h3 id="attendees" tabindex="-1">Attendees for this game</h3>
-      <p class="muted">You can set or change a player’s RSVP here if they call or text. Changes are recorded as set by you.</p>
-      <div class="attendee-list">
-        <% tally.rows.forEach(function (row) { %>
-          <div class="attendee-card">
-            <div class="attendee-head">
-              <strong><%= row.player.name %></strong>
-              <span class="attendee-status"><%= row.status === 'unanswered' ? 'No reply yet' : row.status %><% if (row.status === 'yes') { %> · party of <%= row.coming %><% } %></span>
-              <% if (row.setByName) { %>
-                <span class="set-by">set by <%= row.setByName %></span>
-              <% } %>
-            </div>
-            <% if (game.status === 'scheduled' && actor && actor.canOverrideRsvp) { %>
-              <form class="rsvp-override" method="post" action="/dashboard/rsvp/<%= row.player.id %>">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                <div class="override-controls">
-                  <label class="field compact">RSVP
-                    <select name="status" aria-label="RSVP for <%= row.player.name %>">
-                      <option value="yes" <%= row.status === 'yes' ? 'selected' : '' %>>Yes</option>
-                      <option value="no" <%= row.status === 'no' ? 'selected' : '' %>>No</option>
-                      <option value="maybe" <%= row.status === 'maybe' ? 'selected' : '' %>>Maybe</option>
-                    </select>
-                  </label>
-                  <label class="field compact">Party size
-                    <input type="number" name="party_size" min="1" max="12" value="<%= row.status === 'yes' && row.coming ? row.coming : 1 %>" aria-label="Party size for <%= row.player.name %>" />
-                  </label>
-                  <button type="submit" class="btn btn-secondary btn-sm">Update RSVP</button>
-                </div>
-              </form>
-            <% } else if (row.rsvp && row.rsvp.message) { %>
-              <p class="attendee-msg">
-                <span class="vis-tag"><%= row.rsvp.message_visibility === 'group' ? 'Group' : 'Organizer only' %></span>
-                <%= row.rsvp.message %>
-              </p>
-            <% } %>
-            <% if (game.status === 'scheduled' && row.rsvp && row.rsvp.message) { %>
-              <p class="attendee-msg">
-                <span class="vis-tag"><%= row.rsvp.message_visibility === 'group' ? 'Group' : 'Organizer only' %></span>
-                <%= row.rsvp.message %>
-              </p>
-            <% } %>
-          </div>
-        <% }) %>
+      <% var canOverride = game.status === 'scheduled' && actor && actor.canOverrideRsvp; %>
+      <% if (canOverride) { %>
+        <p class="muted">Tap a player’s RSVP to change it if they call or text. Changes are recorded as set by you.</p>
+      <% } %>
+      <div class="attendees-wrap">
+        <table id="attendees-table">
+          <thead>
+            <tr>
+              <th scope="col">Player</th>
+              <th scope="col">RSVP</th>
+              <th scope="col">Party size</th>
+              <th scope="col">Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% tally.rows.forEach(function (row) { %>
+              <% var statusLabel = row.status === 'unanswered' ? '—' : row.status; %>
+              <% var currentLabel = row.status === 'unanswered' ? 'no reply yet' : row.status; %>
+              <tr>
+                <td><%= row.player.name %></td>
+                <td>
+                  <% if (canOverride) { %>
+                    <button
+                      type="button"
+                      class="rsvp-cell-btn is-<%= row.status %>"
+                      data-player-id="<%= row.player.id %>"
+                      data-player-name="<%= row.player.name %>"
+                      data-status="<%= row.status === 'unanswered' ? '' : row.status %>"
+                      data-party-size="<%= row.status === 'yes' && row.coming ? row.coming : 1 %>"
+                      aria-haspopup="dialog"
+                      aria-expanded="false"
+                      aria-controls="rsvp-editor"
+                      aria-label="Change RSVP for <%= row.player.name %>, currently <%= currentLabel %>"
+                    ><%= statusLabel %></button>
+                  <% } else { %>
+                    <span class="rsvp-cell-text is-<%= row.status %>"><%= statusLabel %></span>
+                  <% } %>
+                  <% if (row.setByName) { %>
+                    <div class="set-by">set by <%= row.setByName %></div>
+                  <% } %>
+                </td>
+                <td><%= row.status === 'yes' ? row.coming : '—' %></td>
+                <td>
+                  <% if (row.rsvp && row.rsvp.message) { %>
+                    <span class="vis-tag"><%= row.rsvp.message_visibility === 'group' ? 'Group' : 'Organizer only' %></span>
+                    <%= row.rsvp.message %>
+                  <% } else { %>—<% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
       </div>
+      <% if (canOverride) { %>
+        <div id="rsvp-editor" class="rsvp-editor" hidden role="dialog" aria-modal="true" aria-labelledby="rsvp-editor-title">
+          <form method="post" action="/dashboard/rsvp/" id="rsvp-editor-form">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <input type="hidden" name="status" id="rsvp-editor-status" value="" />
+            <p id="rsvp-editor-title" class="rsvp-editor-title">Change RSVP for <span id="rsvp-editor-name"></span></p>
+            <div class="rsvp-editor-btns" role="group" aria-label="RSVP choice">
+              <button type="button" class="btn btn-yes" data-rsvp-edit="yes" aria-pressed="false">Yes</button>
+              <button type="button" class="btn btn-no" data-rsvp-edit="no" aria-pressed="false">No</button>
+              <button type="button" class="btn btn-maybe" data-rsvp-edit="maybe" aria-pressed="false">Maybe</button>
+            </div>
+            <label class="field compact" style="margin-top:.6rem">Party size
+              <input type="number" name="party_size" id="rsvp-editor-party" min="1" max="12" value="1" />
+            </label>
+            <div class="row-actions" style="margin-top:.7rem">
+              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="rsvp-editor-cancel">Cancel</button>
+            </div>
+          </form>
+        </div>
+      <% } %>
     <% } %>
   </div>
 </section>

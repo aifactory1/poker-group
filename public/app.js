@@ -160,6 +160,152 @@
     });
   });
 
+  (function setupRsvpEditor() {
+    var editor = document.getElementById('rsvp-editor');
+    if (!editor) return;
+    var form = document.getElementById('rsvp-editor-form');
+    var statusInput = document.getElementById('rsvp-editor-status');
+    var partyInput = document.getElementById('rsvp-editor-party');
+    var nameEl = document.getElementById('rsvp-editor-name');
+    var cancelBtn = document.getElementById('rsvp-editor-cancel');
+    var openBtn = null;
+    var editLabels = { yes: 'Yes', no: 'No', maybe: 'Maybe' };
+
+    function setChoice(choice) {
+      if (statusInput) statusInput.value = choice || '';
+      ['yes', 'no', 'maybe'].forEach(function (c) {
+        var btn = editor.querySelector('[data-rsvp-edit="' + c + '"]');
+        if (!btn) return;
+        var on = choice === c;
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        btn.textContent = on ? ('✓ ' + editLabels[c]) : editLabels[c];
+      });
+      if (partyInput) {
+        partyInput.disabled = choice !== 'yes';
+      }
+    }
+
+    function focusables() {
+      return Array.prototype.slice.call(
+        editor.querySelectorAll('button, [href], input, select, textarea')
+      ).filter(function (el) { return !el.disabled && !el.hidden; });
+    }
+
+    function place() {
+      if (!openBtn) return;
+      var rect = openBtn.getBoundingClientRect();
+      var margin = 8;
+      var vw = window.innerWidth;
+      var vh = window.innerHeight;
+      var ew = Math.min(editor.offsetWidth || 328, vw - 16);
+      var eh = editor.offsetHeight;
+      var left = rect.left;
+      if (left + ew > vw - margin) left = vw - ew - margin;
+      if (left < margin) left = margin;
+      var top = rect.bottom + margin;
+      if (top + eh > vh - margin && rect.top - margin - eh >= margin) {
+        top = rect.top - margin - eh;
+      }
+      if (top + eh > vh - margin) top = Math.max(margin, vh - eh - margin);
+      if (top < margin) top = margin;
+      editor.style.left = left + 'px';
+      editor.style.top = top + 'px';
+    }
+
+    function closeEditor() {
+      if (editor.hidden) return;
+      editor.hidden = true;
+      if (openBtn) {
+        openBtn.setAttribute('aria-expanded', 'false');
+        openBtn.focus();
+      }
+      openBtn = null;
+    }
+
+    function openEditor(btn) {
+      openBtn = btn;
+      document.querySelectorAll('.rsvp-cell-btn').forEach(function (b) {
+        b.setAttribute('aria-expanded', b === btn ? 'true' : 'false');
+      });
+      form.action = '/dashboard/rsvp/' + btn.getAttribute('data-player-id');
+      if (nameEl) nameEl.textContent = btn.getAttribute('data-player-name') || 'this player';
+      var status = btn.getAttribute('data-status') || '';
+      var party = btn.getAttribute('data-party-size') || '1';
+      if (partyInput) {
+        partyInput.disabled = false;
+        partyInput.value = party;
+      }
+      setChoice(status);
+      editor.hidden = false;
+      place();
+      var start = editor.querySelector('[data-rsvp-edit="' + (status || 'yes') + '"]') || focusables()[0];
+      if (start) start.focus();
+    }
+
+    document.querySelectorAll('.rsvp-cell-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (openBtn === btn && !editor.hidden) closeEditor();
+        else openEditor(btn);
+      });
+    });
+
+    editor.querySelectorAll('[data-rsvp-edit]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        setChoice(btn.getAttribute('data-rsvp-edit'));
+        if (partyInput && !partyInput.disabled) partyInput.focus();
+      });
+    });
+
+    if (cancelBtn) cancelBtn.addEventListener('click', closeEditor);
+
+    form.addEventListener('submit', function (ev) {
+      var status = statusInput && statusInput.value;
+      if (!status) {
+        ev.preventDefault();
+        toast('Choose Yes, No, or Maybe');
+        return;
+      }
+      if (partyInput) partyInput.disabled = false;
+    });
+
+    document.addEventListener('keydown', function (ev) {
+      if (editor.hidden) return;
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        closeEditor();
+        return;
+      }
+      if (ev.key !== 'Tab') return;
+      var list = focusables();
+      if (!list.length) return;
+      var first = list[0];
+      var last = list[list.length - 1];
+      if (ev.shiftKey && document.activeElement === first) {
+        ev.preventDefault();
+        last.focus();
+      } else if (!ev.shiftKey && document.activeElement === last) {
+        ev.preventDefault();
+        first.focus();
+      }
+    });
+
+    document.addEventListener('pointerdown', function (ev) {
+      if (editor.hidden) return;
+      if (editor.contains(ev.target)) return;
+      if (openBtn && openBtn.contains(ev.target)) return;
+      closeEditor();
+    });
+
+    window.addEventListener('resize', function () {
+      if (!editor.hidden) place();
+    });
+    window.addEventListener('scroll', function () {
+      if (!editor.hidden) place();
+    }, true);
+  })();
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', restoreScroll);
   } else {

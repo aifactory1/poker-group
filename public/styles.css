@@ -362,23 +362,48 @@
       background: #f8f4ea; border: 1px solid #e0d7c4;
     }
     .cancel-game-box .field { margin-bottom: .5rem; }
-    .attendee-list { display: grid; gap: .7rem; margin-top: .6rem; }
-    .attendee-card {
-      border: 1px solid #e0d7c4; border-radius: 12px; padding: .75rem .85rem;
-      background: #fffdf8;
+    .attendees-wrap { overflow-x: auto; margin-top: .35rem; }
+    #attendees-table { min-width: 0; }
+    #attendees-table th, #attendees-table td { padding: .5rem .4rem; }
+    .rsvp-cell-btn, .rsvp-cell-text {
+      font: inherit; font-weight: 700; text-transform: lowercase;
     }
-    .attendee-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .7rem; }
-    .attendee-status { font-size: .9rem; color: #555; text-transform: capitalize; }
+    .rsvp-cell-btn {
+      appearance: none; background: none; border: 0; padding: .1rem .15rem;
+      margin: 0; color: inherit; cursor: pointer; border-radius: 4px;
+      text-decoration: underline dotted; text-underline-offset: 3px;
+      text-decoration-thickness: 1px;
+    }
+    .rsvp-cell-btn::after {
+      content: " ✎"; font-weight: 400; font-size: .78em; opacity: .4;
+    }
+    .rsvp-cell-btn:hover, .rsvp-cell-btn:focus-visible {
+      text-decoration-style: solid;
+      outline: 2px solid rgba(15, 92, 56, .4); outline-offset: 2px;
+    }
+    .rsvp-cell-btn:hover::after, .rsvp-cell-btn:focus-visible::after,
+    .rsvp-cell-btn[aria-expanded="true"]::after { opacity: .8; }
+    .rsvp-cell-btn.is-yes, .rsvp-cell-text.is-yes { color: #1f8a4c; }
+    .rsvp-cell-btn.is-no, .rsvp-cell-text.is-no { color: #c0392b; }
+    .rsvp-cell-btn.is-maybe, .rsvp-cell-text.is-maybe { color: #8a6a00; }
+    .rsvp-cell-btn.is-unanswered, .rsvp-cell-text.is-unanswered { color: #555; font-weight: 600; }
     .set-by {
-      font-size: .78rem; font-weight: 700; color: #1a237e;
-      background: #eef0ff; border-radius: 999px; padding: .1rem .5rem;
+      display: inline-block; margin-top: .2rem;
+      font-size: .72rem; font-weight: 700; color: #1a237e;
+      background: #eef0ff; border-radius: 999px; padding: .05rem .45rem;
     }
-    .attendee-msg { margin: .45rem 0 0; font-size: .9rem; }
-    .override-controls {
-      display: flex; flex-wrap: wrap; gap: .55rem .7rem; align-items: flex-end;
-      margin-top: .55rem;
+    .rsvp-cell-btn + .set-by, .rsvp-cell-text + .set-by { display: block; }
+    .rsvp-editor {
+      position: fixed; z-index: 40; width: min(20.5rem, calc(100vw - 1.25rem));
+      background: #fffdf8; color: var(--ink);
+      border: 2px solid #1a237e; border-radius: 14px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.22);
+      padding: .85rem .9rem;
     }
-    .field.compact { margin: 0; flex: 1 1 8rem; }
+    .rsvp-editor-title { margin: 0 0 .35rem; font-weight: 700; }
+    .rsvp-editor-btns { display: flex; flex-wrap: wrap; gap: .45rem; margin: .35rem 0 .15rem; }
+    .rsvp-editor-btns .btn { flex: 1 1 auto; min-width: 4.5rem; padding: .45rem .55rem; }
+    .field.compact { margin: 0; }
     .field.compact input, .field.compact select { margin-top: .25rem; }
     .setup-link-box {
       background: #eef0ff; border: 1px solid #c5cae9; border-radius: 12px;
@@ -388,5 +413,6 @@
     #game, #attendees, #testing-tools, #temp-organizer { scroll-margin-top: 7.5rem; }
     @media (max-width: 400px) {
       #game, #attendees, #testing-tools, #temp-organizer { scroll-margin-top: 9rem; }
-      .override-controls { flex-direction: column; align-items: stretch; }
+      #attendees-table { font-size: .85rem; }
+      #attendees-table th, #attendees-table td { padding: .45rem .3rem; }
     }

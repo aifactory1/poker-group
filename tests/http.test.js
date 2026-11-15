@@ -257,6 +257,15 @@ describe('HTTP flows', () => {
     const sam = await svc.getPlayerByEmail('sam@example.com');
     page = await c.get('/');
     assert.match(page.text, /Eric&#39;s house|Eric's house/);
+    assert.match(page.text, /<th scope="col">Player</);
+    assert.match(page.text, /<th scope="col">RSVP</);
+    assert.match(page.text, /<th scope="col">Party size</);
+    assert.match(page.text, /<th scope="col">Message</);
+    assert.match(page.text, /class="rsvp-cell-btn/);
+    assert.match(page.text, /id="rsvp-editor"/);
+    assert.doesNotMatch(page.text, /class="rsvp-override"/);
+    assert.doesNotMatch(page.text, /Update RSVP/);
+    assert.match(page.text, new RegExp('data-player-id="' + sam.id + '"'));
     const override = await c.post('/dashboard/rsvp/' + sam.id, {
       _csrf: csrfFrom(page.text),
       status: 'yes',
@@ -266,6 +275,7 @@ describe('HTTP flows', () => {
     assert.match(override.res.headers.get('location') || '', /#attendees/);
     page = await c.get('/');
     assert.match(page.text, /set by Eric/);
+    assert.match(page.text, /class="rsvp-cell-btn is-yes"/);
 
     const guest = new Client();
     const denied = await guest.post('/dashboard/rsvp/' + sam.id, { _csrf: 'nope', status: 'no', party_size: '1' });
@@ -279,6 +289,8 @@ describe('HTTP flows', () => {
     assert.match(page.text, /Cancelled/);
     assert.match(page.text, /Reinstate game/);
     assert.doesNotMatch(page.text, /id="cancel-game-btn"/);
+    assert.doesNotMatch(page.text, /class="rsvp-cell-btn/);
+    assert.doesNotMatch(page.text, /id="rsvp-editor"/);
 
     const token = sam.rsvp_token;
     const rsvp = await guest.get('/rsvp/' + token);
@@ -350,6 +362,7 @@ describe('HTTP flows', () => {
 
     const sam = await svc.getPlayerByEmail('sam@example.com');
     page = await temp.get('/');
+    assert.match(page.text, /class="rsvp-cell-btn/);
     const override = await temp.post('/dashboard/rsvp/' + sam.id, {
       _csrf: csrfFrom(page.text),
       status: 'maybe',

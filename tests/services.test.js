@@ -129,6 +129,52 @@ describe('services: players, calendar, RSVP, tallies', () => {
     assert.ok(logs.length > 0);
   });
 
+  it('notifies the organizer immediately for a private message, and includes public messages in reminder and game-day summary', async () => {
+    const game = await svc.nextScheduledGame();
+    const chris = await svc.getPlayerByEmail('chris@example.com');
+    const before = await getDb().all("SELECT * FROM job_logs WHERE job_type = 'email'");
+    const beforeIds = new Set(before.map((l) => l.id));
+
+    await svc.saveRsvp(chris.id, game.id, {
+      status: 'yes',
+      party_size: 1,
+      message: 'Running late, tell Eric only',
+      message_visibility: 'organizer',
+    });
+    const afterPrivate = await getDb().all("SELECT * FROM job_logs WHERE job_type IN ('email', 'organizer_message')");
+    const newPrivate = afterPrivate.filter((l) => !beforeIds.has(l.id));
+    assert.ok(newPrivate.some((l) => l.job_type === 'organizer_message' && String(l.payload).includes('Running late, tell Eric only')));
+    const privateEmails = newPrivate.filter((l) => l.job_type === 'email' && String(l.payload).includes('private_message'));
+    assert.ok(privateEmails.length >= 1);
+    assert.ok(privateEmails.every((l) => String(l.payload).includes('eric@example.com')));
+    assert.ok(!privateEmails.some((l) => /mike@example.com|dave@example.com/.test(String(l.payload))));
+
+    const midIds = new Set((await getDb().all("SELECT id FROM job_logs")).map((l) => l.id));
+    await svc.saveRsvp(chris.id, game.id, {
+      status: 'yes',
+      party_size: 1,
+      message: 'Bringing chips for everyone',
+      message_visibility: 'group',
+    });
+    const afterPublic = await getDb().all("SELECT * FROM job_logs WHERE job_type = 'email'");
+    const newPublicEmails = afterPublic.filter((l) => !midIds.has(l.id));
+    assert.equal(newPublicEmails.length, 0, 'no per-message emails to the group');
+
+    const reminder = await svc.runReminderJob(new Date('2026-11-15T10:00:00-07:00'));
+    assert.equal(reminder.ok, true);
+    assert.ok(reminder.publicMessages.some((line) => /Bringing chips for everyone/.test(line)));
+    const reminderLog = await getDb().get(
+      "SELECT * FROM job_logs WHERE job_type = 'reminder_job' ORDER BY id DESC LIMIT 1"
+    );
+    assert.ok(reminderLog);
+    assert.match(String(reminderLog.payload), /Bringing chips for everyone/);
+
+    const summary = await svc.runGameDaySummaryJob(new Date('2026-11-16T09:05:00-07:00'));
+    assert.equal(summary.ok, true);
+    assert.ok(summary.publicMessages.some((line) => /Bringing chips for everyone/.test(line)));
+    assert.ok(summary.count >= 7);
+  });
+
   it('records an organizer override and uses venue on invites', async () => {
     const game = await svc.nextScheduledGame();
     const chris = await svc.getPlayerByEmail('chris@example.com');

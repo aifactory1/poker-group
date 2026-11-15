@@ -418,6 +418,7 @@ router.post('/settings/job/:kind', auth.requireOwner, async (req, res) => {
   let result;
   if (kind === 'invite') result = await svc.runInviteJob();
   else if (kind === 'reminder') result = await svc.runReminderJob();
+  else if (kind === 'game-day-summary') result = await svc.runGameDaySummaryJob();
   else if (kind === 'auto-cancel') result = await svc.runAutoCancelJob();
   else {
     req.flash('error', 'Unknown job.');

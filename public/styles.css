@@ -405,3 +405,22 @@
       #attendees-table { font-size: .85rem; }
       #attendees-table th, #attendees-table td { padding: .45rem .3rem; }
     }
+
+    .rsvp-saved {
+      min-height: 1.2em; margin: .15rem 0 .4rem; font-size: .88rem;
+      font-weight: 700; color: #1f8a4c; opacity: 0; transition: opacity .2s ease;
+    }
+    .rsvp-saved.show { opacity: 1; }
+    .rsvp-extras { margin: .35rem 0 0; }
+    .rsvp-extras summary {
+      cursor: pointer; font-weight: 600; color: var(--ink-soft);
+      list-style: none; padding: .25rem 0;
+    }
+    .rsvp-extras summary::-webkit-details-marker { display: none; }
+    .rsvp-extras summary::before { content: "▸ "; color: #888; }
+    .rsvp-extras[open] summary::before { content: "▾ "; }
+    .rsvp-extras-body { margin-top: .6rem; }
+    @media (max-width: 400px) {
+      .rsvp-btns { gap: .4rem; }
+      .rsvp-btns .btn { flex: 1 1 0; min-width: 5.2rem; padding: .65rem .4rem; }
+    }

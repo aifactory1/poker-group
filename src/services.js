@@ -443,7 +443,7 @@ async function getRsvp(playerId, gameId) {
   return await getDb().get('SELECT * FROM rsvps WHERE player_id = ? AND game_night_id = ?', [playerId, gameId]);
 }
 
-async function saveRsvp(playerId, gameId, { status, party_size, message, message_visibility, setBy } = {}) {
+async function saveRsvp(playerId, gameId, { status, party_size, message, message_visibility, setBy, notify: shouldNotify = true } = {}) {
   const allowed = { yes: 1, no: 1, maybe: 1 };
   if (!allowed[status]) throw Object.assign(new Error('Choose Yes, No, or Maybe'), { status: 400 });
   const game = await getGame(gameId);
@@ -453,28 +453,111 @@ async function saveRsvp(playerId, gameId, { status, party_size, message, message
   }
   const player = await getPlayer(playerId);
   if (!player) throw Object.assign(new Error('Player not found'), { status: 404 });
-  let party = Math.max(1, Number(party_size) || 1);
+  const existing = await getRsvp(playerId, gameId);
+  let party = party_size != null ? Math.max(1, Number(party_size) || 1) : (existing && Number(existing.party_size)) || 1;
   if (status !== 'yes') party = 1;
   if (party > 12) party = 12;
-  const existing = await getRsvp(playerId, gameId);
-  const vis = message_visibility === 'group' ? 'group' : (existing && existing.message_visibility) || 'organizer';
+  const vis = message_visibility === 'group'
+    ? 'group'
+    : message_visibility === 'organizer'
+      ? 'organizer'
+      : (existing && existing.message_visibility) || 'organizer';
   const msg = message != null ? String(message).trim() : (existing && existing.message) || '';
-  const setByName = setBy && setBy.name ? String(setBy.name).trim() : null;
-  const setByKind = setByName ? (setBy.kind || 'organizer') : null;
+  let setByName;
+  let setByKind;
+  if (setBy && setBy.name) {
+    setByName = String(setBy.name).trim();
+    setByKind = setBy.kind || 'organizer';
+  } else if (existing) {
+    setByName = existing.set_by_name || null;
+    setByKind = existing.set_by_kind || null;
+  } else {
+    setByName = null;
+    setByKind = null;
+  }
   const ts = nowIso();
   if (existing) {
     await getDb().run(
       `UPDATE rsvps SET status=?, party_size=?, message=?, message_visibility=?, set_by_name=?, set_by_kind=?, updated_at=? WHERE id=?`,
       [status, party, msg, vis, setByName, setByKind, ts, existing.id]
     );
-    return await getRsvp(playerId, gameId);
+  } else {
+    await getDb().run(
+      `INSERT INTO rsvps (player_id, game_night_id, status, party_size, message, message_visibility, set_by_name, set_by_kind, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [playerId, gameId, status, party, msg, vis, setByName, setByKind, ts, ts]
+    );
   }
-  await getDb().run(
-    `INSERT INTO rsvps (player_id, game_night_id, status, party_size, message, message_visibility, set_by_name, set_by_kind, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [playerId, gameId, status, party, msg, vis, setByName, setByKind, ts, ts]
+  const saved = await getRsvp(playerId, gameId);
+  if (shouldNotify) await notifyForRsvpMessage({ player, game, previous: existing, saved });
+  return saved;
+}
+
+function publicMessageLines(tally) {
+  return (tally.rows || [])
+    .filter((r) => r.rsvp && r.rsvp.message && r.rsvp.message_visibility === 'group')
+    .map((r) => r.player.name + ': ' + r.rsvp.message);
+}
+
+function publicMessagesBlock(tally) {
+  const lines = publicMessageLines(tally);
+  if (!lines.length) return '';
+  return '\nGroup messages:\n' + lines.join('\n') + '\n';
+}
+
+async function organizerNotifyEmails() {
+  const rows = await getDb().all(
+    `SELECT email FROM admin_users WHERE email IS NOT NULL AND (role = 'owner' OR role IS NULL OR role = '')`
   );
-  return await getRsvp(playerId, gameId);
+  const seen = new Set();
+  const emails = [];
+  for (const r of rows || []) {
+    const email = String(r.email || '').trim();
+    const key = email.toLowerCase();
+    if (!email || seen.has(key)) continue;
+    seen.add(key);
+    emails.push(email);
+  }
+  return emails;
+}
+
+async function notifyForRsvpMessage({ player, game, previous, saved }) {
+  const msg = saved && saved.message ? String(saved.message).trim() : '';
+  if (!msg) return;
+  const vis = saved.message_visibility === 'group' ? 'group' : 'organizer';
+  const changed = !previous
+    || String(previous.message || '').trim() !== msg
+    || (previous.message_visibility === 'group' ? 'group' : 'organizer') !== vis;
+  if (!changed) return;
+  if (vis !== 'organizer') return;
+  const st = await getSettings();
+  const emails = await organizerNotifyEmails();
+  const subject = st.group_name + ' — message from ' + player.name;
+  const text =
+    player.name +
+    ' sent a private message about ' +
+    formatNiceDate(game.game_date) +
+    ':\n\n' +
+    msg +
+    '\n';
+  for (const to of emails) {
+    await notify.sendEmail({
+      to,
+      subject,
+      text,
+      meta: { kind: 'private_message', gameId: game.id, playerId: player.id, visibility: 'organizer' },
+    });
+  }
+  await notify.log('organizer_message', {
+    gameId: game.id,
+    game_date: game.game_date,
+    playerId: player.id,
+    player: player.name,
+    message: msg,
+    visibility: 'organizer',
+    recipients: emails,
+    stub: true,
+  });
 }
 
 async function publicWhosPlaying(game) {
@@ -570,6 +653,7 @@ async function runReminderJob(now = new Date()) {
       'Game: ' + formatNiceDate(game.game_date) + '\n' +
       'Time: ' + formatTime12(game.start_time) + '–' + formatTime12(game.end_time) + '\n' +
       (venue ? 'Where: ' + venue + '\n' : '') +
+      publicMessagesBlock(t) +
       '\nRSVP here: ' + rsvpUrl(p) + '\n';
     await notify.sendEmail({
       to: p.email,
@@ -578,8 +662,50 @@ async function runReminderJob(now = new Date()) {
       meta: { kind: 'reminder', gameId: game.id, playerId: p.id },
     });
   }
-  await notify.log('reminder_job', { gameId: game.id, count: unanswered.length, stub: true });
-  return { ok: true, game, count: unanswered.length, recipients: unanswered.map((p) => p.email), stub: true };
+  const publicMessages = publicMessageLines(t);
+  await notify.log('reminder_job', {
+    gameId: game.id,
+    count: unanswered.length,
+    publicMessages,
+    stub: true,
+  });
+  return { ok: true, game, count: unanswered.length, recipients: unanswered.map((p) => p.email), publicMessages, stub: true };
+}
+
+async function runGameDaySummaryJob(now = new Date()) {
+  const today = todayISO(now);
+  const game = await getGameByDate(today) || (weekdayUTC(today) === 1 ? await ensureGameNight(today) : null);
+  if (!game) return { ok: false, reason: 'Today is not a game night' };
+  if (game.status !== 'scheduled') return { ok: false, reason: 'Game is already ' + game.status, game };
+  const st = await getSettings();
+  const t = await tallyForGame(game);
+  const players = await listPlayers({ includeInactive: false });
+  const venue = effectiveVenue(game, st);
+  const publicMessages = publicMessageLines(t);
+  const subject = st.group_name + ' — today, ' + formatNiceDate(game.game_date);
+  const summary =
+    'Game: ' + formatNiceDate(game.game_date) + '\n' +
+    'Time: ' + formatTime12(game.start_time) + '–' + formatTime12(game.end_time) + '\n' +
+    (venue ? 'Where: ' + venue + '\n' : '') +
+    'Confirmed: ' + t.yesPeople + ' (need ' + t.minimum + ')\n' +
+    publicMessagesBlock(t);
+  for (const p of players) {
+    const text = summary + '\nRSVP / who\'s playing: ' + rsvpUrl(p) + '\n';
+    await notify.sendEmail({
+      to: p.email,
+      subject,
+      text,
+      meta: { kind: 'game_day_summary', gameId: game.id, playerId: p.id },
+    });
+  }
+  await notify.log('game_day_summary_job', {
+    gameId: game.id,
+    game_date: game.game_date,
+    count: players.length,
+    publicMessages,
+    stub: true,
+  });
+  return { ok: true, game, count: players.length, publicMessages, stub: true };
 }
 
 async function runAutoCancelJob(now = new Date()) {
@@ -882,7 +1008,9 @@ module.exports = {
   listAnnouncements,
   runInviteJob,
   runReminderJob,
+  runGameDaySummaryJob,
   runAutoCancelJob,
+  publicMessageLines,
   holidaySkipReason,
   displayFirstName,
   organizerDisplayName,

@@ -5,7 +5,9 @@
     <% if (typeof admin !== 'undefined' && admin) { %>
       <p class="row-actions" style="margin:.25rem 0 .75rem"><a class="btn btn-secondary" href="/">Back to dashboard</a></p>
     <% } %>
-    <p class="muted">Hi <%= player.name %>. This is your private link — no sign-in needed. You can change your answer later with the same link.</p>
+    <% if (player && player.name) { %>
+      <p class="muted" style="margin:.25rem 0 .6rem">Hi <%= player.name %>.</p>
+    <% } %>
     <% if (!game) { %>
       <p>There is no upcoming scheduled game right now.</p>
     <% } else { %>
@@ -21,34 +23,41 @@
           <span class="status-pill cancelled">Cancelled</span>
           <% if (game.skip_reason) { %><span> <%= game.skip_reason %></span><% } %>
         </p>
-        <p>This game has been cancelled. You don’t need to RSVP for this night.</p>
         <div class="row-actions">
           <a class="btn btn-secondary" href="/rsvp/<%= token %>/whos">Who's playing</a>
         </div>
       <% } else { %>
-      <form method="post" action="/rsvp/<%= token %>" id="rsvp-form">
+      <% var hasExtras = rsvp && ((rsvp.status === 'yes' && Number(rsvp.party_size) > 1) || (rsvp.message && String(rsvp.message).trim())); %>
+      <form method="post" action="/rsvp/<%= token %>" id="rsvp-form" data-js-rsvp="1">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <input type="hidden" name="status" id="rsvp-status" value="<%= rsvp ? rsvp.status : '' %>" />
-        <div class="rsvp-btns" role="group" aria-label="RSVP choice">
-          <button type="button" class="btn btn-yes" data-rsvp="yes" aria-pressed="false">Yes</button>
-          <button type="button" class="btn btn-no" data-rsvp="no" aria-pressed="false">No</button>
-          <button type="button" class="btn btn-maybe" data-rsvp="maybe" aria-pressed="false">Maybe</button>
+        <div class="rsvp-btns" role="group" aria-label="RSVP">
+          <button type="submit" class="btn btn-yes" name="choice" value="yes" data-rsvp="yes" aria-pressed="<%= rsvp && rsvp.status === 'yes' ? 'true' : 'false' %>"><%= rsvp && rsvp.status === 'yes' ? '✓ Yes' : 'Yes' %></button>
+          <button type="submit" class="btn btn-no" name="choice" value="no" data-rsvp="no" aria-pressed="<%= rsvp && rsvp.status === 'no' ? 'true' : 'false' %>"><%= rsvp && rsvp.status === 'no' ? '✓ No' : 'No' %></button>
+          <button type="submit" class="btn btn-maybe" name="choice" value="maybe" data-rsvp="maybe" aria-pressed="<%= rsvp && rsvp.status === 'maybe' ? 'true' : 'false' %>"><%= rsvp && rsvp.status === 'maybe' ? '✓ Maybe' : 'Maybe' %></button>
         </div>
-        <label class="field">Total coming (includes you)
-          <input type="number" name="party_size" id="rsvp-guests" min="1" max="12" value="<%= rsvp && rsvp.party_size ? rsvp.party_size : 1 %>" aria-describedby="rsvp-guests-hint" />
-          <span class="hint" id="rsvp-guests-hint">Guests count toward the five-player minimum. You count as 1.</span>
-        </label>
-        <label class="field">Message (optional)
-          <textarea name="message" placeholder="Optional note…"><%= rsvp && rsvp.message ? rsvp.message : '' %></textarea>
-        </label>
-        <label class="field">Who can see this message?
-          <select name="message_visibility" aria-label="Message visibility">
-            <option value="organizer" <%= !rsvp || rsvp.message_visibility !== 'group' ? 'selected' : '' %>>Only the organizer (default)</option>
-            <option value="group" <%= rsvp && rsvp.message_visibility === 'group' ? 'selected' : '' %>>Everyone in Poker Group</option>
-          </select>
-        </label>
-        <div class="row-actions">
-          <button type="submit" class="btn btn-primary">Save RSVP</button>
+        <p class="rsvp-saved<%= typeof saved !== 'undefined' && saved ? ' show' : '' %>" id="rsvp-saved" role="status" aria-live="polite"><%= typeof saved !== 'undefined' && saved ? 'Saved' : '' %></p>
+        <details class="rsvp-extras" id="rsvp-extras"<%= hasExtras ? ' open' : '' %>>
+          <summary>Add a guest or message</summary>
+          <div class="rsvp-extras-body">
+            <label class="field" id="guest-field"<%= !rsvp || rsvp.status !== 'yes' ? ' hidden' : '' %>>Party size
+              <input type="number" name="party_size" id="rsvp-guests" min="1" max="12" value="<%= rsvp && rsvp.party_size ? rsvp.party_size : 1 %>" />
+            </label>
+            <label class="field">Message
+              <textarea name="message" id="rsvp-message" rows="3"><%= rsvp && rsvp.message ? rsvp.message : '' %></textarea>
+            </label>
+            <label class="field">Who can see this message?
+              <select name="message_visibility" id="rsvp-visibility" aria-label="Message visibility">
+                <option value="organizer" <%= !rsvp || rsvp.message_visibility !== 'group' ? 'selected' : '' %>>Only the organizer</option>
+                <option value="group" <%= rsvp && rsvp.message_visibility === 'group' ? 'selected' : '' %>>Everyone in Poker Group</option>
+              </select>
+            </label>
+            <div class="row-actions" id="extras-save-wrap">
+              <button type="submit" class="btn btn-secondary btn-sm" id="extras-save">Save</button>
+            </div>
+          </div>
+        </details>
+        <div class="row-actions" style="margin-top:1rem">
           <a class="btn btn-secondary" href="/rsvp/<%= token %>/whos">Who's playing</a>
         </div>
       </form>

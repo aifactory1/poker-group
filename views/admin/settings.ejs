@@ -66,6 +66,10 @@
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <button type="submit" class="btn btn-secondary">Simulate Sunday reminder</button>
       </form>
+      <form method="post" action="/settings/job/game-day-summary">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="btn btn-secondary">Simulate game-day summary</button>
+      </form>
       <form method="post" action="/settings/job/auto-cancel">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <button type="submit" class="btn btn-secondary">Test: run the 4 PM auto-cancel check now</button>

@@ -7,41 +7,124 @@
     var hidden = document.getElementById('rsvp-status');
     if (hidden) hidden.value = choice || '';
     var guests = document.getElementById('rsvp-guests');
+    var guestField = document.getElementById('guest-field');
     ['yes', 'no', 'maybe'].forEach(function (c) {
       var btn = document.querySelector('[data-rsvp="' + c + '"]');
       if (!btn) return;
       var on = choice === c;
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-      btn.textContent = on ? ('✓ ' + LABELS[c] + ' · Selected') : LABELS[c];
+      btn.textContent = on ? ('✓ ' + LABELS[c]) : LABELS[c];
     });
+    if (guestField) guestField.hidden = choice !== 'yes';
     if (guests) {
-      if (choice !== 'yes') {
-        guests.value = '1';
-        guests.disabled = true;
-      } else {
-        guests.disabled = false;
-      }
+      guests.disabled = choice !== 'yes';
+      if (choice !== 'yes') guests.value = '1';
     }
+  }
+
+  function showSaved() {
+    var el = document.getElementById('rsvp-saved');
+    if (!el) return;
+    el.textContent = 'Saved';
+    el.classList.add('show');
+    el.hidden = false;
+    clearTimeout(showSaved._t);
+    showSaved._t = setTimeout(function () { el.classList.remove('show'); }, 2200);
   }
 
   var form = document.getElementById('rsvp-form');
   if (form) {
     var initial = (document.getElementById('rsvp-status') || {}).value || '';
     setPressed(initial || null);
-    document.querySelectorAll('[data-rsvp]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        setPressed(btn.getAttribute('data-rsvp'));
-      });
-    });
-    form.addEventListener('submit', function (ev) {
-      var status = (document.getElementById('rsvp-status') || {}).value;
-      if (!status) {
-        ev.preventDefault();
-        toast('Choose Yes, No, or Maybe');
-        return;
-      }
+    var extrasSave = document.getElementById('extras-save-wrap');
+    if (extrasSave) extrasSave.hidden = true;
+
+    var savedOnLoad = document.getElementById('rsvp-saved');
+    if (savedOnLoad && savedOnLoad.classList.contains('show')) {
+      showSaved();
+    }
+
+    function csrfToken() {
+      var input = form.querySelector('input[name="_csrf"]');
+      return input ? input.value : '';
+    }
+
+    function currentPayload(choice) {
+      var body = new URLSearchParams();
+      body.set('_csrf', csrfToken());
+      var status = choice || (document.getElementById('rsvp-status') || {}).value || '';
+      if (status) body.set('status', status);
+      var guests = document.getElementById('rsvp-guests');
+      if (guests && status === 'yes') body.set('party_size', guests.value || '1');
+      var message = document.getElementById('rsvp-message');
+      if (message) body.set('message', message.value);
+      var vis = document.getElementById('rsvp-visibility');
+      if (vis) body.set('message_visibility', vis.value);
+      return body;
+    }
+
+    function fallbackSubmit() {
       var guests = document.getElementById('rsvp-guests');
       if (guests) guests.disabled = false;
+      form.submit();
+    }
+
+    function saveRsvp(choice) {
+      var body = currentPayload(choice);
+      if (!body.get('status')) return Promise.resolve();
+      return fetch(form.getAttribute('action') || location.pathname, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRF-Token': csrfToken()
+        },
+        body: body.toString(),
+        credentials: 'same-origin'
+      }).then(function (res) {
+        if (!res.ok) throw new Error('save failed');
+        return res.json();
+      }).then(function (data) {
+        if (!data || !data.ok) throw new Error('save failed');
+        if (data.rsvp && data.rsvp.status) setPressed(data.rsvp.status);
+        showSaved();
+        return data;
+      }).catch(function () {
+        fallbackSubmit();
+      });
+    }
+
+    document.querySelectorAll('[data-rsvp]').forEach(function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        var choice = btn.getAttribute('data-rsvp');
+        setPressed(choice);
+        saveRsvp(choice);
+      });
+    });
+
+    var extrasTimer;
+    function saveExtrasSoon() {
+      clearTimeout(extrasTimer);
+      extrasTimer = setTimeout(function () { saveRsvp(); }, 400);
+    }
+    var guests = document.getElementById('rsvp-guests');
+    var message = document.getElementById('rsvp-message');
+    var vis = document.getElementById('rsvp-visibility');
+    if (guests) guests.addEventListener('change', function () { saveRsvp(); });
+    if (vis) vis.addEventListener('change', function () { saveRsvp(); });
+    if (message) {
+      message.addEventListener('input', saveExtrasSoon);
+      message.addEventListener('blur', function () { saveRsvp(); });
+    }
+
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var guestsEl = document.getElementById('rsvp-guests');
+      if (guestsEl) guestsEl.disabled = false;
+      var status = (document.getElementById('rsvp-status') || {}).value;
+      if (!status) return;
+      saveRsvp(status);
     });
   }
 

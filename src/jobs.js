@@ -15,6 +15,7 @@ let lastRunKey = {
   invite: '',
   reminder: '',
   auto_cancel: '',
+  game_day_summary: '',
 };
 
 function mark(name, iso, hhmm) {
@@ -40,6 +41,12 @@ async function tick(now = new Date()) {
     const result = await svc.runReminderJob(now);
     mark('reminder', iso, st.remind_time);
     console.log('[jobs] reminder', result.ok ? 'ok count=' + result.count : result.reason);
+  }
+  if (dow === 1 && hhmm >= '09:00' && !already('game_day_summary', iso, '09:00')) {
+    const result = await svc.runGameDaySummaryJob(now);
+    mark('game_day_summary', iso, '09:00');
+    if (result.ok) console.log('[jobs] game-day summary', 'ok count=' + result.count);
+    else if (result.reason && !/not a game night/.test(result.reason)) console.log('[jobs] game-day summary', result.reason);
   }
   if (hhmm >= st.cutoff_time && !already('auto_cancel', iso, st.cutoff_time)) {
     const result = await svc.runAutoCancelJob(now);

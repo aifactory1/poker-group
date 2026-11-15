@@ -69,7 +69,7 @@ async function seedPlayersAndGames() {
   ];
   for (const s of samples) {
     const p = byEmail[s.email];
-    if (p) await svc.saveRsvp(p.id, game.id, s);
+    if (p) await svc.saveRsvp(p.id, game.id, { ...s, notify: false });
   }
   return { game, rsvpsSeeded: true };
 }

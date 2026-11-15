@@ -34,25 +34,45 @@ router.get('/rsvp/:token', loadRsvpContext, async (req, res) => {
     formatTime12,
     settings: await svc.getSettings(),
     venue: req.game ? svc.effectiveVenue(req.game, await svc.getSettings()) : '',
+    saved: req.query.saved === '1',
   });
 });
+
+function wantsJson(req) {
+  const accept = String(req.get('accept') || '');
+  return accept.includes('application/json');
+}
 
 router.post('/rsvp/:token', loadRsvpContext, auth.requireCsrf, async (req, res, next) => {
   try {
     if (!req.game) {
+      if (wantsJson(req)) return res.status(400).json({ ok: false, error: 'There is no upcoming scheduled game to RSVP for.' });
       req.flash('error', 'There is no upcoming scheduled game to RSVP for.');
       return res.redirect('/rsvp/' + req.params.token);
     }
-    await svc.saveRsvp(req.player.id, req.game.id, {
-      status: req.body.status,
+    const status = req.body.choice || req.body.status;
+    const existing = await svc.getRsvp(req.player.id, req.game.id);
+    const saved = await svc.saveRsvp(req.player.id, req.game.id, {
+      status: status || (existing && existing.status),
       party_size: req.body.party_size,
-      message: req.body.message,
+      message: Object.prototype.hasOwnProperty.call(req.body, 'message') ? req.body.message : undefined,
       message_visibility: req.body.message_visibility,
     });
-    req.flash('ok', 'Your RSVP has been saved.');
-    res.redirect('/rsvp/' + req.params.token);
+    if (wantsJson(req)) {
+      return res.json({
+        ok: true,
+        rsvp: {
+          status: saved.status,
+          party_size: saved.party_size,
+          message: saved.message || '',
+          message_visibility: saved.message_visibility,
+        },
+      });
+    }
+    res.redirect('/rsvp/' + req.params.token + '?saved=1');
   } catch (err) {
-    if (err.status === 400) {
+    if (err.status === 400 || err.status === 404) {
+      if (wantsJson(req)) return res.status(err.status).json({ ok: false, error: err.message });
       req.flash('error', err.message);
       return res.redirect('/rsvp/' + req.params.token);
     }

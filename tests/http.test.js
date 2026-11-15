@@ -49,6 +49,24 @@ class Client {
     this.store(res);
     return { res, text: await res.text() };
   }
+  async postJson(path, data) {
+    const res = await fetch(base + path, {
+      method: 'POST',
+      headers: {
+        cookie: this.cookieHeader(),
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+        'x-csrf-token': data._csrf || '',
+      },
+      body: new URLSearchParams(data).toString(),
+      redirect: 'manual',
+    });
+    this.store(res);
+    const text = await res.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch {}
+    return { res, text, json };
+  }
 }
 
 function csrfFrom(html) {
@@ -137,18 +155,44 @@ describe('HTTP flows', () => {
     assert.match(page.text, /Time: 7:30 PM–10:00 PM/);
     assert.doesNotMatch(page.text, /Time:[^<]*America\/Phoenix/);
 
+    assert.match(page.text, /Add a guest or message/);
+    assert.doesNotMatch(page.text, /Save RSVP/);
+    assert.doesNotMatch(page.text, /Guests count toward/);
+    assert.doesNotMatch(page.text, /no sign-in needed/);
+
     const { res } = await c.post('/rsvp/' + chris.rsvp_token, {
       _csrf: csrfFrom(page.text),
-      status: 'yes',
+      choice: 'yes',
       party_size: '3',
       message: 'Bringing two',
       message_visibility: 'group',
     });
     assert.equal(res.status, 302);
+    assert.match(res.headers.get('location') || '', /saved=1/);
     const game = await svc.nextScheduledGame();
     const r = await svc.getRsvp(chris.id, game.id);
     assert.equal(r.status, 'yes');
     assert.equal(r.party_size, 3);
+
+    page = await c.get('/rsvp/' + chris.rsvp_token + '?saved=1');
+    assert.match(page.text, /id="rsvp-status" value="yes"/);
+    assert.match(page.text, />Saved</);
+
+    const jsonSave = await c.postJson('/rsvp/' + chris.rsvp_token, {
+      _csrf: csrfFrom(page.text),
+      status: 'maybe',
+    });
+    assert.equal(jsonSave.res.status, 200);
+    assert.equal(jsonSave.json && jsonSave.json.ok, true);
+    assert.equal(jsonSave.json.rsvp.status, 'maybe');
+    // restore yes + public message for the who's-playing assertions below
+    await svc.saveRsvp(chris.id, game.id, {
+      status: 'yes',
+      party_size: 3,
+      message: 'Bringing two',
+      message_visibility: 'group',
+      notify: false,
+    });
 
     page = await c.get('/rsvp/' + chris.rsvp_token);
     assert.match(page.text, /id="rsvp-status" value="yes"/);

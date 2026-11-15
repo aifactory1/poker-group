@@ -46,6 +46,14 @@ router.post('/login', auth.requireCsrf, async (req, res) => {
   }
   failed.delete(ip);
   req.session.adminId = admin.id;
+  if ((admin.role || 'owner') === 'temp') {
+    const actor = await auth.actorFromSession(req);
+    if (!actor || actor.blocked) {
+      req.session.adminId = null;
+      req.flash('info', (actor && actor.blockReason) || 'Your temporary organizer access has ended.');
+      return res.redirect('/login');
+    }
+  }
   const next = String(req.body.next || '/');
   const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/';
   res.redirect(safeNext);
@@ -94,12 +102,30 @@ function renderSetupError(res, reason) {
 router.get('/setup/:token', async (req, res) => {
   const checked = await setupToken.inspectToken(req.params.token);
   if (!checked.ok) return renderSetupError(res, checked.reason);
+  if (checked.purpose === 'temp') {
+    const svc = require('../services');
+    const grant = await svc.getGrant(checked.grantId);
+    if (!grant || grant.revoked_at || grant.status === 'expired') {
+      return renderSetupError(res, 'expired');
+    }
+    return res.render('setup', {
+      title: 'Set temporary organizer password',
+      token: req.params.token,
+      defaultEmail: grant.player_email,
+      mode: 'temp',
+      playerName: grant.player_name,
+      startsOn: grant.starts_on,
+      endsOn: grant.ends_on,
+      formatNiceDate: require('../dates').formatNiceDate,
+    });
+  }
   const admin = await auth.getAdminByEmail(config.adminEmail) || await auth.getAdminById(1);
   const defaultEmail = (admin && admin.email) || config.adminEmail || 'eric@example.com';
   res.render('setup', {
     title: 'Set organizer password',
     token: req.params.token,
     defaultEmail,
+    mode: 'owner',
   });
 });
 
@@ -125,6 +151,32 @@ router.post('/setup/:token', auth.requireCsrf, async (req, res, next) => {
   if (!looksLikeEmail(email)) return retry('Please enter a valid email address.');
   if (password.length < 8) return retry('Choose a password of at least 8 characters.');
   if (password !== confirm) return retry('The password and confirmation do not match.');
+
+  const precheck = await setupToken.inspectToken(req.params.token);
+  if (precheck.ok && precheck.purpose === 'temp') {
+    try {
+      const svc = require('../services');
+      const completed = await svc.completeTempSetup(req.params.token, {
+        email,
+        passwordHash: hashPassword(password),
+      });
+      if (!completed.ok) return renderSetupError(res, completed.reason);
+      return req.session.regenerate((err) => {
+        if (err) return next(err);
+        req.session.adminId = completed.admin.id;
+        req.session.flashes = [
+          {
+            type: 'ok',
+            message: 'Your temporary organizer password has been saved. You are signed in.',
+          },
+        ];
+        res.redirect('/');
+      });
+    } catch (err) {
+      if (err.status === 400) return retry(err.message);
+      return next(err);
+    }
+  }
 
   const consumed = await setupToken.consumeToken(req.params.token);
   if (!consumed.ok) return renderSetupError(res, consumed.reason);

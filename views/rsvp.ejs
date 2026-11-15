@@ -12,7 +12,20 @@
       <div id="rsvp-game-line" class="muted">
         <p id="rsvp-game-date" style="margin:.25rem 0">Game: <%= formatNiceDate(game.game_date) %></p>
         <p id="rsvp-game-time" style="margin:.25rem 0">Time: <%= formatTime12(game.start_time) %>–<%= formatTime12(game.end_time) %></p>
+        <% if (typeof venue !== 'undefined' && venue) { %>
+          <p id="rsvp-game-venue" style="margin:.25rem 0">Venue: <%= venue %></p>
+        <% } %>
       </div>
+      <% if (game.status === 'cancelled') { %>
+        <p>
+          <span class="status-pill cancelled">Cancelled</span>
+          <% if (game.skip_reason) { %><span> <%= game.skip_reason %></span><% } %>
+        </p>
+        <p>This game has been cancelled. You don’t need to RSVP for this night.</p>
+        <div class="row-actions">
+          <a class="btn btn-secondary" href="/rsvp/<%= token %>/whos">Who's playing</a>
+        </div>
+      <% } else { %>
       <form method="post" action="/rsvp/<%= token %>" id="rsvp-form">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <input type="hidden" name="status" id="rsvp-status" value="<%= rsvp ? rsvp.status : '' %>" />
@@ -39,6 +52,7 @@
           <a class="btn btn-secondary" href="/rsvp/<%= token %>/whos">Who's playing</a>
         </div>
       </form>
+      <% } %>
     <% } %>
   </div>
 </section>

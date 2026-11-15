@@ -11,6 +11,15 @@
     <strong>TEST SITE: sample data, nothing is emailed.</strong>
     <span> Sample players use @example.com. Emails and texts are only logged, never sent.</span>
   </div>
+  <% if (typeof tempOrganizerBanner !== 'undefined' && tempOrganizerBanner) { %>
+    <div class="temp-organizer-banner" role="status">
+      <% if (tempOrganizerBanner.status === 'active') { %>
+        Temporary organizer: <strong><%= tempOrganizerBanner.player_name %></strong> through <%= formatNiceDate(tempOrganizerBanner.ends_on) %>.
+      <% } else { %>
+        Temporary organizer starting <%= formatNiceDate(tempOrganizerBanner.starts_on) %>: <strong><%= tempOrganizerBanner.player_name %></strong> (through <%= formatNiceDate(tempOrganizerBanner.ends_on) %>).
+      <% } %>
+    </div>
+  <% } %>
   <div class="wrap">
     <header class="app-header">
       <div class="brand">
@@ -34,7 +43,9 @@
         <a href="/players"<%= nav === 'players' ? ' aria-current="page"' : '' %>>Players</a>
         <a href="/calendar"<%= nav === 'calendar' ? ' aria-current="page"' : '' %>>Calendar</a>
         <a href="/announce"<%= nav === 'announce' ? ' aria-current="page"' : '' %>>Announce</a>
-        <a href="/settings"<%= nav === 'settings' ? ' aria-current="page"' : '' %>>Settings</a>
+        <% if (typeof actor !== 'undefined' && actor && actor.isOwner) { %>
+          <a href="/settings"<%= nav === 'settings' ? ' aria-current="page"' : '' %>>Settings</a>
+        <% } %>
       </nav>
     <% } %>
     <% (typeof flashes !== 'undefined' ? flashes : []).forEach(function (f) { %>

@@ -12,7 +12,7 @@ async function openTestDatabase() {
   if (!url) return openDatabase({ sqlitePath: ':memory:' });
   await openDatabase({ databaseUrl: url });
   await getDb().exec(
-    'TRUNCATE rsvps, announcements, job_logs, game_nights, players, admin_users, sessions, settings, setup_tokens RESTART IDENTITY CASCADE'
+    'TRUNCATE rsvps, announcements, job_logs, game_nights, players, admin_users, sessions, settings, setup_tokens, temp_organizer_grants RESTART IDENTITY CASCADE'
   );
   return getDb();
 }

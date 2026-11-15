@@ -1,8 +1,13 @@
 <%- include('partials/header') %>
 <div class="login-wrap" style="padding:0 0 2rem">
   <div class="card login-card">
-    <h2>Set your organizer password</h2>
-    <p class="muted">This one-time link expires in 48 hours and can only be used once. Choose the email and password you’ll use to sign in. Player RSVP links do not need an account.</p>
+    <% if (typeof mode !== 'undefined' && mode === 'temp') { %>
+      <h2>Set your temporary organizer password</h2>
+      <p class="muted">Hi<%= typeof playerName !== 'undefined' && playerName ? ' ' + playerName : '' %>. This one-time link can only be used once. Choose the email and password you’ll use to sign in as a temporary organizer<% if (typeof startsOn !== 'undefined') { %> from <%= formatNiceDate(startsOn) %> through <%= formatNiceDate(endsOn) %><% } %>. After that date, this login stops working.</p>
+    <% } else { %>
+      <h2>Set your organizer password</h2>
+      <p class="muted">This one-time link expires in 48 hours and can only be used once. Choose the email and password you’ll use to sign in. Player RSVP links do not need an account.</p>
+    <% } %>
     <form method="post" action="/setup/<%= token %>">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <label class="field">Login email

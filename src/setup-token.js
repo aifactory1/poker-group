@@ -92,6 +92,16 @@ async function ensureEnvSetupToken(token, { ttlMs = TTL_MS } = {}) {
   return { enabled: true, created: true, expiresAt };
 }
 
+async function createToken({ purpose = 'owner', grantId = null, source = 'generated', ttlMs = TTL_MS } = {}) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+  await getDb().run(
+    'INSERT INTO setup_tokens (hash, source, created_at, expires_at, used_at, purpose, grant_id) VALUES (?, ?, ?, ?, NULL, ?, ?)',
+    [hashToken(token), source, nowIso(), expiresAt, purpose || 'owner', grantId]
+  );
+  return { token, expiresAt, purpose, grantId };
+}
+
 async function inspectToken(token) {
   const provided = String(token || '');
   if (!provided) return { ok: false, reason: 'invalid' };
@@ -99,7 +109,13 @@ async function inspectToken(token) {
   if (!row) return { ok: false, reason: 'invalid' };
   if (row.used_at) return { ok: false, reason: 'used' };
   if (!row.expires_at || Date.parse(row.expires_at) <= Date.now()) return { ok: false, reason: 'expired' };
-  return { ok: true, expiresAt: row.expires_at };
+  return {
+    ok: true,
+    expiresAt: row.expires_at,
+    purpose: row.purpose || 'owner',
+    grantId: row.grant_id || null,
+    source: row.source,
+  };
 }
 
 async function consumeToken(token) {
@@ -124,6 +140,7 @@ function readLinkPath() {
 module.exports = {
   ensureSetupToken,
   ensureEnvSetupToken,
+  createToken,
   inspectToken,
   consumeToken,
   readLinkPath,

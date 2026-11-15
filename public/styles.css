@@ -348,3 +348,45 @@
       .header-actions .btn { margin-left: auto; }
     }
     .row-actions form { display: inline; }
+
+    .temp-organizer-banner {
+      background: #1a237e; color: #fff; text-align: center;
+      padding: .55rem .85rem; font-size: .9rem;
+    }
+    .temp-organizer-banner strong { color: #e8c84a; }
+    .status-pill.cancelled {
+      background: #f8d7da; color: #721c24; border: 1px solid #f5c2c7;
+    }
+    .cancel-game-box {
+      margin: 1rem 0; padding: .85rem .9rem; border-radius: 12px;
+      background: #f8f4ea; border: 1px solid #e0d7c4;
+    }
+    .cancel-game-box .field { margin-bottom: .5rem; }
+    .attendee-list { display: grid; gap: .7rem; margin-top: .6rem; }
+    .attendee-card {
+      border: 1px solid #e0d7c4; border-radius: 12px; padding: .75rem .85rem;
+      background: #fffdf8;
+    }
+    .attendee-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .35rem .7rem; }
+    .attendee-status { font-size: .9rem; color: #555; text-transform: capitalize; }
+    .set-by {
+      font-size: .78rem; font-weight: 700; color: #1a237e;
+      background: #eef0ff; border-radius: 999px; padding: .1rem .5rem;
+    }
+    .attendee-msg { margin: .45rem 0 0; font-size: .9rem; }
+    .override-controls {
+      display: flex; flex-wrap: wrap; gap: .55rem .7rem; align-items: flex-end;
+      margin-top: .55rem;
+    }
+    .field.compact { margin: 0; flex: 1 1 8rem; }
+    .field.compact input, .field.compact select { margin-top: .25rem; }
+    .setup-link-box {
+      background: #eef0ff; border: 1px solid #c5cae9; border-radius: 12px;
+      padding: .85rem .9rem; margin: .75rem 0 1rem;
+    }
+    .setup-link-box .copy-link { margin: .35rem 0 .6rem; }
+    #game, #attendees, #testing-tools, #temp-organizer { scroll-margin-top: 7.5rem; }
+    @media (max-width: 400px) {
+      #game, #attendees, #testing-tools, #temp-organizer { scroll-margin-top: 9rem; }
+      .override-controls { flex-direction: column; align-items: stretch; }
+    }

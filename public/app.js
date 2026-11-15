@@ -118,6 +118,7 @@
       else if (dest.indexOf('/players') === 0) dest = '/players';
       else if (dest.indexOf('/settings') === 0) dest = '/settings';
       else if (dest.indexOf('/announce') === 0) dest = '/announce';
+      else if (dest.indexOf('/dashboard') === 0) dest = '/';
       else if (dest.indexOf('/rsvp/') === 0) dest = location.pathname;
       else if (dest !== location.pathname && dest !== '/login' && dest !== '/logout') {
         // keep dest
@@ -126,6 +127,36 @@
       }
       if (dest === '/login' || dest === '/logout' || dest.indexOf('/setup/') === 0) return;
       saveScrollForPath(dest);
+    });
+  });
+
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = btn.getAttribute('data-copy') || '';
+      var label = btn.getAttribute('data-copy-label') || btn.textContent || 'Copy';
+      if (!text) return;
+      function done() {
+        toast('Copied');
+        btn.textContent = 'Copied';
+        clearTimeout(btn._t);
+        btn._t = setTimeout(function () { btn.textContent = label; }, 1800);
+      }
+      function fallback() {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) { toast(text); }
+        document.body.removeChild(ta);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(fallback);
+      } else {
+        fallback();
+      }
     });
   });
 

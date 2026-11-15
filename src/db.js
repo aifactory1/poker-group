@@ -16,7 +16,9 @@ const SQLITE_SCHEMA = [
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'owner',
+    player_id INTEGER
   )`,
   `CREATE TABLE IF NOT EXISTS sessions (
     sid TEXT PRIMARY KEY,
@@ -28,7 +30,9 @@ const SQLITE_SCHEMA = [
     source TEXT NOT NULL,
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
-    used_at TEXT
+    used_at TEXT,
+    purpose TEXT NOT NULL DEFAULT 'owner',
+    grant_id INTEGER
   )`,
   `CREATE TABLE IF NOT EXISTS settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -42,7 +46,8 @@ const SQLITE_SCHEMA = [
     minimum_yes INTEGER NOT NULL,
     default_start_time TEXT NOT NULL,
     default_end_time TEXT NOT NULL,
-    timezone TEXT NOT NULL
+    timezone TEXT NOT NULL,
+    default_venue TEXT NOT NULL DEFAULT ''
   )`,
   `CREATE TABLE IF NOT EXISTS players (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,6 +66,7 @@ const SQLITE_SCHEMA = [
     end_time TEXT NOT NULL,
     status TEXT NOT NULL,
     skip_reason TEXT,
+    venue TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
@@ -72,6 +78,8 @@ const SQLITE_SCHEMA = [
     party_size INTEGER NOT NULL DEFAULT 1,
     message TEXT,
     message_visibility TEXT NOT NULL DEFAULT 'organizer',
+    set_by_name TEXT,
+    set_by_kind TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE (player_id, game_night_id),
@@ -95,6 +103,17 @@ const SQLITE_SCHEMA = [
     job_type TEXT NOT NULL,
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS temp_organizer_grants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id INTEGER NOT NULL,
+    admin_user_id INTEGER,
+    starts_on TEXT NOT NULL,
+    ends_on TEXT NOT NULL,
+    revoked_at TEXT,
+    granted_by INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
   )`,
 ];
 
@@ -220,25 +239,32 @@ async function migratePostgres(db) {
   for (const sql of pgSchema()) await db.exec(sql);
 }
 
+async function migrateAll(db) {
+  if (db.dialect === 'postgres') await migratePostgres(db);
+  else migrateSqlite(db);
+  const { applySchemaUpdates } = require('./migrate');
+  await applySchemaUpdates(db);
+}
+
 async function openDatabase(opts = {}) {
   if (impl) return impl;
   if (opts.databaseUrl) {
     impl = await createPostgres(opts.databaseUrl);
-    await migratePostgres(impl);
+    await migrateAll(impl);
     return impl;
   }
   if (opts.sqlitePath) {
     impl = createSqlite(opts.sqlitePath);
-    migrateSqlite(impl);
+    await migrateAll(impl);
     return impl;
   }
   if (isPostgres()) {
     impl = await createPostgres(config.databaseUrl);
-    await migratePostgres(impl);
+    await migrateAll(impl);
     return impl;
   }
   impl = createSqlite(opts.file || config.sqlitePath);
-  migrateSqlite(impl);
+  await migrateAll(impl);
   return impl;
 }
 

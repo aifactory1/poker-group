@@ -15,7 +15,7 @@ async function loadRsvpContext(req, res, next) {
     return next(err);
   }
   await svc.ensureUpcomingGames(12);
-  const game = await svc.nextScheduledGame();
+  const game = await svc.nextPlayerFacingGame();
   req.player = player;
   req.game = game;
   next();
@@ -33,6 +33,7 @@ router.get('/rsvp/:token', loadRsvpContext, async (req, res) => {
     formatNiceDate,
     formatTime12,
     settings: await svc.getSettings(),
+    venue: req.game ? svc.effectiveVenue(req.game, await svc.getSettings()) : '',
   });
 });
 
@@ -71,6 +72,7 @@ router.get('/rsvp/:token/whos', loadRsvpContext, async (req, res) => {
       formatNiceDate,
       formatTime12,
       settings: await svc.getSettings(),
+      venue: '',
     });
   }
   const view = await svc.publicWhosPlaying(req.game);
@@ -84,6 +86,7 @@ router.get('/rsvp/:token/whos', loadRsvpContext, async (req, res) => {
     formatNiceDate,
     formatTime12,
     settings: await svc.getSettings(),
+    venue: svc.effectiveVenue(req.game, await svc.getSettings()),
   });
 });
 

@@ -15,6 +15,7 @@ const {
   weekdayUTC,
 } = require('../dates');
 const notify = require('../notify');
+const { config } = require('../config');
 
 const router = express.Router();
 
@@ -30,7 +31,7 @@ router.use(auth.requireCsrf);
 
 router.get('/', async (req, res) => {
   await svc.ensureUpcomingGames(16);
-  const game = await svc.nextScheduledGame();
+  const game = await svc.nextPlayerFacingGame();
   const tally = game ? await svc.tallyForGame(game) : null;
   const settings = await svc.getSettings();
   res.render('admin/dashboard', {
@@ -39,29 +40,89 @@ router.get('/', async (req, res) => {
     game,
     tally,
     settings,
+    venue: game ? svc.effectiveVenue(game, settings) : '',
     formatNiceDate,
     formatTime12,
   });
 });
 
-router.post('/admin/jobs/auto-cancel', async (req, res) => {
-  const when = req.body.at ? new Date(req.body.at) : new Date();
-  const result = await svc.runAutoCancelJob(when);
-  if (result.cancelled) req.flash('ok', 'Game auto-cancelled (notifications logged only).');
-  else if (result.ok && !result.cancelled) req.flash('ok', 'Cutoff check: enough people confirmed. Game stays on.');
-  else req.flash('info', result.reason || 'No action taken.');
-  res.redirect('/');
+router.post('/dashboard/rsvp/:playerId', async (req, res, next) => {
+  try {
+    if (!req.actor || !req.actor.canOverrideRsvp) {
+      const err = new Error('You cannot change another player\'s RSVP.');
+      err.status = 403;
+      return next(err);
+    }
+    const game = await svc.nextPlayerFacingGame();
+    if (!game || game.status !== 'scheduled') {
+      throw Object.assign(new Error('There is no upcoming scheduled game to change an RSVP for.'), { status: 400 });
+    }
+    const setByName = await svc.organizerDisplayName(req.admin);
+    await svc.saveRsvp(req.params.playerId, game.id, {
+      status: req.body.status,
+      party_size: req.body.party_size,
+      setBy: { name: setByName, kind: req.actor.isOwner ? 'organizer' : 'temp_organizer' },
+    });
+    req.flash('ok', 'RSVP updated and recorded as set by ' + setByName + '.');
+  } catch (err) {
+    if (err.status === 403) return next(err);
+    req.flash('error', err.message);
+  }
+  res.redirect('/#attendees');
+});
+
+router.post('/dashboard/cancel', async (req, res) => {
+  try {
+    const game = await svc.nextPlayerFacingGame();
+    if (!game || game.status !== 'scheduled') {
+      throw Object.assign(new Error('There is no upcoming scheduled game to cancel.'), { status: 400 });
+    }
+    if (String(game.game_date) < todayISO()) {
+      throw Object.assign(new Error('Past dates cannot be edited.'), { status: 400 });
+    }
+    const cancelledBy = await svc.organizerDisplayName(req.admin);
+    await svc.cancelUpcomingGame(game.game_date, {
+      reason: req.body.reason,
+      cancelledBy,
+    });
+    req.flash('ok', 'Game cancelled. Players will be notified (logged only during testing).');
+  } catch (err) {
+    req.flash('error', err.message);
+  }
+  res.redirect('/#game');
+});
+
+router.post('/dashboard/reinstate', async (req, res) => {
+  try {
+    const game = await svc.nextPlayerFacingGame();
+    if (!game || game.status !== 'cancelled') {
+      throw Object.assign(new Error('There is no cancelled game to reinstate.'), { status: 400 });
+    }
+    if (String(game.game_date) < todayISO()) {
+      throw Object.assign(new Error('Past dates cannot be edited.'), { status: 400 });
+    }
+    await svc.restoreGame(game.game_date);
+    req.flash('ok', 'Game reinstated.');
+  } catch (err) {
+    req.flash('error', err.message);
+  }
+  res.redirect('/#game');
 });
 
 router.get('/players', async (req, res) => {
   const players = await svc.listPlayers({ includeInactive: true });
   const editing = req.query.edit ? await svc.getPlayer(req.query.edit) : null;
+  const grantDefaults = await svc.defaultGrantDates();
   res.render('admin/players', {
     title: 'Players',
     nav: 'players',
     players,
     editing,
     rsvpUrl: svc.rsvpUrl,
+    grants: await svc.listGrants(),
+    grantDefaults,
+    pendingSetupLink: req.session.pendingSetupLink || null,
+    formatNiceDate,
   });
 });
 
@@ -81,6 +142,29 @@ router.post('/players', async (req, res) => {
   }
 });
 
+router.post('/players/grant-organizer', auth.requireOwner, async (req, res) => {
+  try {
+    const result = await svc.grantTempOrganizer({
+      playerId: req.body.grant_player_id,
+      starts_on: req.body.starts_on,
+      ends_on: req.body.ends_on,
+      grantedBy: req.admin && req.admin.id,
+    });
+    req.session.pendingSetupLink = {
+      url: config.baseUrl + result.setupPath,
+      path: result.setupPath,
+      playerName: result.grant.player_name,
+      startsOn: result.grant.starts_on,
+      endsOn: result.grant.ends_on,
+      expiresAt: result.expiresAt,
+    };
+    req.flash('ok', 'Temporary organizer access granted to ' + result.grant.player_name + '. Copy the one-time setup link below and send it to them.');
+  } catch (err) {
+    req.flash('error', err.message);
+  }
+  res.redirect('/players#temp-organizer');
+});
+
 router.post('/players/:id', async (req, res) => {
   try {
     await svc.updatePlayer(req.params.id, {
@@ -97,7 +181,7 @@ router.post('/players/:id', async (req, res) => {
   }
 });
 
-router.post('/players/:id/delete', async (req, res) => {
+router.post('/players/:id/delete', auth.requireOwner, async (req, res) => {
   try {
     const p = await svc.deletePlayer(req.params.id);
     req.flash('ok', 'Removed ' + p.name + '.');
@@ -115,6 +199,19 @@ router.post('/players/:id/rotate-token', async (req, res) => {
     req.flash('error', err.message);
   }
   res.redirect('/players?edit=' + encodeURIComponent(req.params.id) + '#player-form');
+});
+
+router.post('/players/grants/:grantId/revoke', auth.requireOwner, async (req, res) => {
+  try {
+    const grant = await svc.revokeGrant(req.params.grantId);
+    if (req.session.pendingSetupLink && grant && req.session.pendingSetupLink.playerName === grant.player_name) {
+      req.session.pendingSetupLink = null;
+    }
+    req.flash('ok', 'Temporary organizer access for ' + grant.player_name + ' has been revoked.');
+  } catch (err) {
+    req.flash('error', err.message);
+  }
+  res.redirect('/players#temp-organizer');
 });
 
 router.get('/calendar', async (req, res) => {
@@ -218,9 +315,12 @@ router.post('/calendar/times', async (req, res) => {
   try {
     if (date && req.body.night_start && req.body.night_end) {
       rejectPastGameDate(date);
-      await svc.updateGameTimes(date, req.body.night_start, req.body.night_end);
-      req.flash('ok', 'Times updated for ' + formatNiceDate(date) + '.');
+      await svc.updateGameTimes(date, req.body.night_start, req.body.night_end, { venue: req.body.venue });
+      req.flash('ok', 'Time and venue updated for ' + formatNiceDate(date) + '.');
     } else if (req.body.default_start_time && req.body.default_end_time) {
+      if (!req.actor || !req.actor.isOwner) {
+        throw Object.assign(new Error('Only the main organizer can change the default game times.'), { status: 403 });
+      }
       await svc.updateSettings({
         default_start_time: req.body.default_start_time,
         default_end_time: req.body.default_end_time,
@@ -280,7 +380,7 @@ router.post('/announce/send', async (req, res) => {
   res.redirect('/announce');
 });
 
-router.get('/settings', async (req, res) => {
+router.get('/settings', auth.requireOwner, async (req, res) => {
   res.render('admin/settings', {
     title: 'Settings',
     nav: 'settings',
@@ -290,7 +390,7 @@ router.get('/settings', async (req, res) => {
   });
 });
 
-router.post('/settings', async (req, res) => {
+router.post('/settings', auth.requireOwner, async (req, res) => {
   try {
     await svc.updateSettings({
       group_name: req.body.group_name,
@@ -303,6 +403,7 @@ router.post('/settings', async (req, res) => {
       minimum_yes: req.body.minimum_yes,
       default_start_time: req.body.default_start_time,
       default_end_time: req.body.default_end_time,
+      default_venue: req.body.default_venue,
       applyTimesToFuture: true,
     });
     req.flash('ok', 'Settings saved.');
@@ -312,7 +413,7 @@ router.post('/settings', async (req, res) => {
   res.redirect('/settings');
 });
 
-router.post('/settings/job/:kind', async (req, res) => {
+router.post('/settings/job/:kind', auth.requireOwner, async (req, res) => {
   const kind = req.params.kind;
   let result;
   if (kind === 'invite') result = await svc.runInviteJob();
@@ -322,13 +423,17 @@ router.post('/settings/job/:kind', async (req, res) => {
     req.flash('error', 'Unknown job.');
     return res.redirect('/settings');
   }
-  if (result.ok) {
-    const extra = result.cancelled ? ' Game cancelled.' : result.count != null ? ' Recipients: ' + result.count + '.' : '';
+  if (kind === 'auto-cancel') {
+    if (result.cancelled) req.flash('ok', 'Game auto-cancelled (notifications logged only).');
+    else if (result.ok && !result.cancelled) req.flash('ok', 'Cutoff check: enough people confirmed. Game stays on.');
+    else req.flash('info', result.reason || 'No action taken.');
+  } else if (result.ok) {
+    const extra = result.count != null ? ' Recipients: ' + result.count + '.' : '';
     req.flash('ok', 'Ran ' + kind + ' job (log only).' + extra);
   } else {
     req.flash('info', result.reason || 'No action taken.');
   }
-  res.redirect('/settings');
+  res.redirect('/settings#testing-tools');
 });
 
 module.exports = router;

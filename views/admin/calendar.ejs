@@ -3,6 +3,7 @@
   <div class="card">
     <h2>Recurring Mondays</h2>
     <p class="muted">Games are Mondays by default. Tap a date to select it (navy with a gold border) and to jump to Skip or time changes. Selecting alone does not skip a night. Past dates are grayed out and cannot be edited. U.S. federal holidays and major Jewish holidays are computed for any year. Jewish holidays begin at sundown the evening before, so a Monday is flagged when the holiday falls that day or starts that evening. Holiday Mondays start as suggested skips and can be restored.</p>
+    <% if (typeof actor !== 'undefined' && actor && actor.isOwner) { %>
     <form method="post" action="/calendar/times" id="cal-defaults">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <input type="hidden" name="year" value="<%= year %>" />
@@ -19,6 +20,7 @@
         <button type="submit" class="btn btn-primary btn-sm">Save default game times</button>
       </div>
     </form>
+    <% } %>
     <div class="cal-nav" id="calendar">
       <a class="btn btn-secondary btn-sm" href="/calendar?year=<%= prev.year %>&amp;month=<%= prev.month %>#calendar" aria-label="Previous month">← Prev</a>
       <h3><%= monthLabel %></h3>
@@ -70,6 +72,8 @@
           <% if (selectedGame) { %>
             — <%= selectedGame.status %><% if (selectedGame.skip_reason) { %> (<%= selectedGame.skip_reason %>)<% } %>
             · <%= formatTime12(selectedGame.start_time) %>–<%= formatTime12(selectedGame.end_time) %>
+            <% var nightVenue = (selectedGame.venue && String(selectedGame.venue).trim()) || (settings.default_venue && String(settings.default_venue).trim()) || ''; %>
+            <% if (nightVenue) { %> · Venue: <%= nightVenue %><% } %>
           <% } else if (selectedHoliday) { %>
             — <%= selectedHoliday.label %>
           <% } else { %>
@@ -114,8 +118,12 @@
                 <input type="time" name="night_end" value="<%= selectedGame.end_time %>" />
               </label>
             </div>
+            <label class="field">Venue this night
+              <input type="text" name="venue" value="<%= (selectedGame.venue && String(selectedGame.venue).trim()) || (settings.default_venue || '') %>" placeholder="Leave blank to use the default venue" />
+              <span class="hint">Overrides the default venue for this Monday only.</span>
+            </label>
             <div class="row-actions">
-              <button type="submit" class="btn btn-secondary btn-sm">Save times for this Monday</button>
+              <button type="submit" class="btn btn-secondary btn-sm">Save time and venue for this Monday</button>
             </div>
           </form>
         <% } %>

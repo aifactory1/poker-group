@@ -24,19 +24,6 @@ function issueCsrf(req) {
   return req.session.csrfToken;
 }
 
-async function requireAdmin(req, res, next) {
-  if (req.session && req.session.adminId) {
-    const admin = await getAdminById(req.session.adminId);
-    if (admin) {
-      req.admin = admin;
-      res.locals.admin = admin;
-      return next();
-    }
-  }
-  const nextUrl = req.originalUrl || '/';
-  return res.redirect('/login?next=' + encodeURIComponent(nextUrl));
-}
-
 function requireCsrf(req, res, next) {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
   const token = (req.body && req.body._csrf) || req.get('x-csrf-token');
@@ -48,13 +35,90 @@ function requireCsrf(req, res, next) {
   next();
 }
 
-async function createAdmin(email, passwordHash) {
+async function createAdmin(email, passwordHash, { role = 'owner', playerId = null } = {}) {
   const ts = nowIso();
   const result = await getDb().run(
-    'INSERT INTO admin_users (email, password_hash, created_at) VALUES (?, ?, ?)',
-    [email, passwordHash, ts]
+    'INSERT INTO admin_users (email, password_hash, created_at, role, player_id) VALUES (?, ?, ?, ?, ?)',
+    [email, passwordHash, ts, role || 'owner', playerId]
   );
   return await getAdminById(result.lastInsertRowid);
+}
+
+async function actorFromSession(req) {
+  if (!req.session || !req.session.adminId) return null;
+  const admin = await getAdminById(req.session.adminId);
+  if (!admin) return null;
+  const role = admin.role || 'owner';
+  if (role !== 'temp') {
+    return {
+      admin,
+      role: 'owner',
+      isOwner: true,
+      blocked: false,
+      canOverrideRsvp: true,
+      canManageOrganizers: true,
+      canDeletePlayers: true,
+      canChangeSettings: true,
+      grant: null,
+    };
+  }
+  const svc = require('./services');
+  const grant = await svc.getActiveGrantForAdmin(admin.id);
+  if (grant) {
+    return {
+      admin,
+      role: 'temp',
+      isOwner: false,
+      blocked: false,
+      canOverrideRsvp: true,
+      canManageOrganizers: false,
+      canDeletePlayers: false,
+      canChangeSettings: false,
+      grant,
+    };
+  }
+  const open = await svc.openGrantForAdmin(admin.id);
+  return {
+    admin,
+    role: 'temp',
+    isOwner: false,
+    blocked: true,
+    blockReason: open && open.status === 'upcoming'
+      ? 'Your temporary organizer access starts on ' + open.starts_on + '.'
+      : 'Your temporary organizer access has ended.',
+    canOverrideRsvp: false,
+    canManageOrganizers: false,
+    canDeletePlayers: false,
+    canChangeSettings: false,
+    grant: open,
+  };
+}
+
+async function requireAdmin(req, res, next) {
+  const actor = req.actor || await actorFromSession(req);
+  if (actor && !actor.blocked) {
+    req.actor = actor;
+    req.admin = actor.admin;
+    res.locals.admin = actor.admin;
+    res.locals.actor = actor;
+    return next();
+  }
+  if (actor && actor.blocked) {
+    req.session.adminId = null;
+    if (typeof req.flash === 'function') req.flash('info', actor.blockReason || 'Your temporary organizer access has ended.');
+    return res.redirect('/login');
+  }
+  const nextUrl = req.originalUrl || '/';
+  return res.redirect('/login?next=' + encodeURIComponent(nextUrl));
+}
+
+function requireOwner(req, res, next) {
+  if (!req.actor || !req.actor.isOwner) {
+    const err = new Error('Only the main organizer can do that.');
+    err.status = 403;
+    return next(err);
+  }
+  next();
 }
 
 async function updateOrganizerCredentials(email, passwordHash) {
@@ -82,7 +146,9 @@ module.exports = {
   getAdminById,
   authenticate,
   issueCsrf,
+  actorFromSession,
   requireAdmin,
+  requireOwner,
   requireCsrf,
   createAdmin,
   updateOrganizerCredentials,

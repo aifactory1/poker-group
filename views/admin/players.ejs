@@ -33,9 +33,11 @@
     </form>
     <% if (editing) { %>
       <div class="link-tools">
-        <p class="muted" style="margin:0 0 .35rem">Private RSVP link for <%= editing.name %>:</p>
-        <p class="copy-link" style="margin:0 0 .5rem"><a href="<%= rsvpUrl(editing) %>"><%= rsvpUrl(editing) %></a></p>
-        <form method="post" action="/players/<%= editing.id %>/rotate-token" onsubmit="return confirm('Create a new RSVP link? The old one will stop working. Only needed if a link was forwarded or shared.');">
+        <p class="muted" style="margin:0 0 .5rem">RSVP link tools for <%= editing.name %>. Players already get this link in the invite email.</p>
+        <div class="row-actions">
+          <button type="button" class="btn btn-quiet btn-sm" data-copy="<%= rsvpUrl(editing) %>" data-copy-label="Copy RSVP link">Copy RSVP link</button>
+        </div>
+        <form method="post" action="/players/<%= editing.id %>/rotate-token" onsubmit="return confirm('Create a new RSVP link? The old one will stop working. Only needed if a link was forwarded or shared.');" style="margin-top:.55rem">
           <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
           <button type="submit" class="btn btn-quiet btn-sm">Create a new RSVP link</button>
         </form>
@@ -68,12 +70,13 @@
               </td>
               <td>
                 <div class="row-actions">
-                  <a class="btn btn-primary btn-sm" href="<%= rsvpUrl(p) %>">RSVP link</a>
                   <a class="btn btn-secondary btn-sm" href="/players?edit=<%= p.id %>#player-form">Edit</a>
-                  <form method="post" action="/players/<%= p.id %>/delete" onsubmit="return confirm('Delete <%= p.name %>? Their RSVPs will be removed.');">
-                    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                  </form>
+                  <% if (actor && actor.canDeletePlayers) { %>
+                    <form method="post" action="/players/<%= p.id %>/delete" onsubmit="return confirm('Delete <%= p.name %>? Their RSVPs will be removed.');">
+                      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                      <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    </form>
+                  <% } %>
                 </div>
               </td>
             </tr>
@@ -81,6 +84,76 @@
         </tbody>
       </table>
     </div>
+    <% if (actor && actor.canManageOrganizers) { %>
+      <div class="divider"></div>
+      <h3 id="temp-organizer" tabindex="-1">Temporary organizer</h3>
+      <p class="muted">Grant a player access to change the venue or time, skip or cancel a game, send announcements, and update RSVPs while you are away. They cannot manage organizers, delete players, or change Settings. Access ends automatically after the end date.</p>
+      <% if (pendingSetupLink) { %>
+        <div class="setup-link-box" role="status">
+          <p><strong>One-time setup link for <%= pendingSetupLink.playerName %></strong> (<%= formatNiceDate(pendingSetupLink.startsOn) %> through <%= formatNiceDate(pendingSetupLink.endsOn) %>)</p>
+          <p class="copy-link"><%= pendingSetupLink.url %></p>
+          <button type="button" class="btn btn-secondary btn-sm" data-copy="<%= pendingSetupLink.url %>" data-copy-label="Copy setup link">Copy setup link</button>
+          <p class="hint">Send this private link to them so they can set a password. It can be used only once.</p>
+        </div>
+      <% } %>
+      <form method="post" action="/players/grant-organizer" id="grant-organizer-form">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <div class="grid-2">
+          <label class="field">Player
+            <select name="grant_player_id" id="grant-player" required aria-label="Player to grant temporary organizer access">
+              <option value="">Select a player</option>
+              <% players.filter(function (p) { return p.active; }).forEach(function (p) { %>
+                <option value="<%= p.id %>" <%= editing && String(editing.id) === String(p.id) ? 'selected' : '' %>><%= p.name %></option>
+              <% }) %>
+            </select>
+          </label>
+        </div>
+        <div class="grid-2">
+          <label class="field">Starts on
+            <input type="date" name="starts_on" required value="<%= grantDefaults.starts_on %>" />
+          </label>
+          <label class="field">Ends on
+            <input type="date" name="ends_on" required value="<%= grantDefaults.ends_on %>" />
+            <span class="hint">Defaults to the next game through the day after it.</span>
+          </label>
+        </div>
+        <div class="row-actions">
+          <button type="submit" class="btn btn-primary">Grant temporary organizer access</button>
+        </div>
+      </form>
+      <% if (grants && grants.length) { %>
+        <h3>Organizer assignments</h3>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Player</th>
+                <th scope="col">Dates</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% grants.forEach(function (g) { %>
+                <tr>
+                  <td><%= g.player_name %></td>
+                  <td><%= formatNiceDate(g.starts_on) %> – <%= formatNiceDate(g.ends_on) %></td>
+                  <td><%= g.status %></td>
+                  <td>
+                    <% if (g.status === 'active' || g.status === 'upcoming') { %>
+                      <form method="post" action="/players/grants/<%= g.id %>/revoke" onsubmit="return confirm('Revoke temporary organizer access for <%= g.player_name %>?');">
+                        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                        <button type="submit" class="btn btn-danger btn-sm">Revoke</button>
+                      </form>
+                    <% } else { %>—<% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    <% } %>
   </div>
 </section>
 <%- include('../partials/footer') %>

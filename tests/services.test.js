@@ -128,4 +128,75 @@ describe('services: players, calendar, RSVP, tallies', () => {
     const logs = await getDb().all("SELECT * FROM job_logs WHERE job_type IN ('auto_cancel_job', 'email')");
     assert.ok(logs.length > 0);
   });
+
+  it('records an organizer override and uses venue on invites', async () => {
+    const game = await svc.nextScheduledGame();
+    const chris = await svc.getPlayerByEmail('chris@example.com');
+    await svc.saveRsvp(chris.id, game.id, {
+      status: 'yes',
+      party_size: 2,
+      setBy: { name: 'Eric', kind: 'organizer' },
+    });
+    const tally = await svc.tallyForGame(game);
+    const row = tally.rows.find((r) => r.player.email === 'chris@example.com');
+    assert.equal(row.status, 'yes');
+    assert.equal(row.coming, 2);
+    assert.equal(row.setByName, 'Eric');
+
+    await svc.updateSettings({ default_venue: "Eric's house" });
+    const st = await svc.getSettings();
+    assert.equal(svc.effectiveVenue(game, st), "Eric's house");
+    await svc.ensureGameNight('2027-03-01');
+    await svc.updateGameTimes('2027-03-01', '18:00', '22:00', { venue: 'Mike\'s garage' });
+    const updated = await svc.getGameByDate('2027-03-01');
+    assert.equal(svc.effectiveVenue(updated, st), "Mike's garage");
+  });
+
+  it('manual cancel notifies (log only), stays player-facing, and can be reinstated', async () => {
+    const date = '2026-12-07';
+    await svc.ensureGameNight(date);
+    await svc.restoreGame(date);
+    const cancelled = await svc.cancelUpcomingGame(date, { reason: 'Only two can make it', cancelledBy: 'Eric' });
+    assert.equal(cancelled.status, 'cancelled');
+    const logs = await getDb().all("SELECT * FROM job_logs WHERE job_type IN ('cancel_game', 'email') ORDER BY id DESC LIMIT 20");
+    assert.ok(logs.some((l) => l.job_type === 'cancel_game'));
+    assert.ok(logs.some((l) => l.job_type === 'email' && String(l.payload).includes('Only two can make it')));
+    const facing = await svc.nextPlayerFacingGame(date);
+    assert.equal(facing.game_date, date);
+    assert.equal(facing.status, 'cancelled');
+    const scheduled = await svc.nextScheduledGame(date);
+    assert.ok(!scheduled || scheduled.game_date !== date);
+    const restored = await svc.restoreGame(date);
+    assert.equal(restored.status, 'scheduled');
+  });
+
+  it('grants, expires, and revokes temporary organizer access', async () => {
+    const { hashPassword } = require('../src/crypto-util');
+    const auth = require('../src/auth');
+    const mike = await svc.getPlayerByEmail('mike@example.com');
+    const owner = await getDb().get("SELECT * FROM admin_users ORDER BY id ASC LIMIT 1");
+    const granted = await svc.grantTempOrganizer({
+      playerId: mike.id,
+      starts_on: '2026-11-14',
+      ends_on: '2026-11-17',
+      grantedBy: owner.id,
+    });
+    assert.ok(granted.setupPath.startsWith('/setup/'));
+    assert.equal(granted.grant.status, 'active');
+
+    const completed = await svc.completeTempSetup(granted.token, {
+      email: 'mike@example.com',
+      passwordHash: hashPassword('temp-organizer-pass'),
+    });
+    assert.equal(completed.ok, true);
+    const tempAdmin = completed.admin;
+    assert.equal(tempAdmin.role, 'temp');
+    assert.ok(await svc.getActiveGrantForAdmin(tempAdmin.id, '2026-11-16'));
+    assert.equal(await svc.getActiveGrantForAdmin(tempAdmin.id, '2026-11-18'), undefined);
+
+    await svc.revokeGrant(granted.grant.id);
+    const revoked = await svc.getGrant(granted.grant.id);
+    assert.equal(revoked.status, 'revoked');
+    assert.equal(await svc.getActiveGrantForAdmin(tempAdmin.id, '2026-11-16'), undefined);
+  });
 });

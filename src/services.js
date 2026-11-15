@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
   default_start_time: '19:30',
   default_end_time: '22:00',
   timezone: 'America/Phoenix',
+  default_venue: '',
 };
 
 function bool01(v) {
@@ -43,8 +44,8 @@ async function ensureSettings() {
   await db.run(
     `INSERT INTO settings (
       id, group_name, invite_weekday, invite_time, remind_weekday, remind_time,
-      auto_cancel_enabled, cutoff_time, minimum_yes, default_start_time, default_end_time, timezone
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      auto_cancel_enabled, cutoff_time, minimum_yes, default_start_time, default_end_time, timezone, default_venue
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (id) DO NOTHING`,
     [
       1,
@@ -59,6 +60,7 @@ async function ensureSettings() {
       DEFAULT_SETTINGS.default_start_time,
       DEFAULT_SETTINGS.default_end_time,
       DEFAULT_SETTINGS.timezone,
+      DEFAULT_SETTINGS.default_venue,
     ]
   );
   return { ...DEFAULT_SETTINGS };
@@ -71,6 +73,7 @@ function normalizeSettings(row) {
     remind_weekday: Number(row.remind_weekday),
     auto_cancel_enabled: Number(row.auto_cancel_enabled) === 1,
     minimum_yes: Number(row.minimum_yes),
+    default_venue: row.default_venue != null ? String(row.default_venue) : '',
   };
 }
 
@@ -92,10 +95,11 @@ async function updateSettings(patch) {
     default_start_time: patch.default_start_time || cur.default_start_time,
     default_end_time: patch.default_end_time || cur.default_end_time,
     timezone: 'America/Phoenix',
+    default_venue: patch.default_venue != null ? String(patch.default_venue).trim() : cur.default_venue,
   };
   await getDb().run(
     `UPDATE settings SET group_name=?, invite_weekday=?, invite_time=?, remind_weekday=?, remind_time=?,
-      auto_cancel_enabled=?, cutoff_time=?, minimum_yes=?, default_start_time=?, default_end_time=?, timezone=?
+      auto_cancel_enabled=?, cutoff_time=?, minimum_yes=?, default_start_time=?, default_end_time=?, timezone=?, default_venue=?
       WHERE id = 1`,
     [
       next.group_name,
@@ -109,6 +113,7 @@ async function updateSettings(patch) {
       next.default_start_time,
       next.default_end_time,
       next.timezone,
+      next.default_venue,
     ]
   );
   if (patch.applyTimesToFuture && (patch.default_start_time || patch.default_end_time)) {
@@ -284,13 +289,21 @@ async function cancelGame(iso, reason) {
   return await getGame(game.id);
 }
 
-async function updateGameTimes(iso, startTime, endTime) {
+async function updateGameTimes(iso, startTime, endTime, { venue } = {}) {
   const game = await ensureGameNight(iso);
+  const nextVenue = venue === undefined ? game.venue : (String(venue || '').trim() || null);
   await getDb().run(
-    `UPDATE game_nights SET start_time = ?, end_time = ?, updated_at = ? WHERE id = ?`,
-    [startTime, endTime, nowIso(), game.id]
+    `UPDATE game_nights SET start_time = ?, end_time = ?, venue = ?, updated_at = ? WHERE id = ?`,
+    [startTime, endTime, nextVenue, nowIso(), game.id]
   );
   return await getGame(game.id);
+}
+
+function effectiveVenue(game, settings) {
+  const override = game && game.venue != null ? String(game.venue).trim() : '';
+  if (override) return override;
+  const fallback = settings && settings.default_venue != null ? String(settings.default_venue).trim() : '';
+  return fallback;
 }
 
 async function nextScheduledGame(fromIso) {
@@ -302,6 +315,59 @@ async function nextScheduledGame(fromIso) {
      ORDER BY game_date ASC LIMIT 1`,
     [start]
   );
+}
+
+/** Next night players and the dashboard should see: scheduled or cancelled (skipped holidays are jumped). */
+async function nextPlayerFacingGame(fromIso) {
+  await ensureUpcomingGames(16, fromIso);
+  const start = fromIso || todayISO();
+  return await getDb().get(
+    `SELECT * FROM game_nights
+     WHERE game_date >= ? AND status IN ('scheduled', 'cancelled')
+     ORDER BY game_date ASC LIMIT 1`,
+    [start]
+  );
+}
+
+async function notifyPlayersOfCancellation(game, { reason, cancelledBy } = {}) {
+  const players = await listPlayers({ includeInactive: false });
+  const st = await getSettings();
+  const subject = st.group_name + ' — game cancelled for ' + formatNiceDate(game.game_date);
+  const text =
+    'The ' + formatNiceDate(game.game_date) + ' game has been cancelled.\n' +
+    (reason ? 'Reason: ' + reason + '\n' : '') +
+    (cancelledBy ? 'Cancelled by ' + cancelledBy + '.\n' : '');
+  for (const p of players) {
+    await notify.sendEmail({
+      to: p.email,
+      subject,
+      text,
+      meta: { kind: 'cancel', gameId: game.id, playerId: p.id },
+    });
+    if (p.phone) {
+      await notify.sendSms({ to: p.phone, text, meta: { kind: 'cancel', playerId: p.id } });
+    }
+  }
+  await notify.log('cancel_game', {
+    gameId: game.id,
+    game_date: game.game_date,
+    reason: reason || null,
+    cancelledBy: cancelledBy || null,
+    count: players.length,
+    stub: true,
+  });
+  return { count: players.length };
+}
+
+async function cancelUpcomingGame(iso, { reason, cancelledBy } = {}) {
+  const game = await getGameByDate(iso) || await ensureGameNight(iso);
+  if (game.status === 'cancelled') {
+    throw Object.assign(new Error('This game is already cancelled.'), { status: 400 });
+  }
+  const skipReason = (reason && String(reason).trim()) || (cancelledBy ? 'Cancelled by ' + cancelledBy : 'Organizer cancelled');
+  const cancelled = await cancelGame(iso, skipReason);
+  await notifyPlayersOfCancellation(cancelled, { reason: String(reason || '').trim(), cancelledBy });
+  return cancelled;
 }
 
 async function gamesInMonth(year, month) {
@@ -350,7 +416,7 @@ async function tallyForGame(game, players) {
     const r = byPlayer.get(Number(p.id));
     if (!r || !r.status) {
       unanswered++;
-      return { player: p, rsvp: null, status: 'unanswered', coming: 0 };
+      return { player: p, rsvp: null, status: 'unanswered', coming: 0, setByName: null };
     }
     if (r.status === 'yes') {
       yesPlayers++;
@@ -358,7 +424,7 @@ async function tallyForGame(game, players) {
     } else if (r.status === 'no') no++;
     else if (r.status === 'maybe') maybe++;
     else unanswered++;
-    return { player: p, rsvp: r, status: r.status, coming: partyFor(r) };
+    return { player: p, rsvp: r, status: r.status, coming: partyFor(r), setByName: r.set_by_name || null };
   });
   const minimum = (await getSettings()).minimum_yes;
   return {
@@ -377,7 +443,7 @@ async function getRsvp(playerId, gameId) {
   return await getDb().get('SELECT * FROM rsvps WHERE player_id = ? AND game_night_id = ?', [playerId, gameId]);
 }
 
-async function saveRsvp(playerId, gameId, { status, party_size, message, message_visibility }) {
+async function saveRsvp(playerId, gameId, { status, party_size, message, message_visibility, setBy } = {}) {
   const allowed = { yes: 1, no: 1, maybe: 1 };
   if (!allowed[status]) throw Object.assign(new Error('Choose Yes, No, or Maybe'), { status: 400 });
   const game = await getGame(gameId);
@@ -385,24 +451,28 @@ async function saveRsvp(playerId, gameId, { status, party_size, message, message
   if (game.status !== 'scheduled') {
     throw Object.assign(new Error('This night is not scheduled'), { status: 400 });
   }
+  const player = await getPlayer(playerId);
+  if (!player) throw Object.assign(new Error('Player not found'), { status: 404 });
   let party = Math.max(1, Number(party_size) || 1);
   if (status !== 'yes') party = 1;
   if (party > 12) party = 12;
-  const vis = message_visibility === 'group' ? 'group' : 'organizer';
-  const msg = message != null ? String(message).trim() : '';
-  const ts = nowIso();
   const existing = await getRsvp(playerId, gameId);
+  const vis = message_visibility === 'group' ? 'group' : (existing && existing.message_visibility) || 'organizer';
+  const msg = message != null ? String(message).trim() : (existing && existing.message) || '';
+  const setByName = setBy && setBy.name ? String(setBy.name).trim() : null;
+  const setByKind = setByName ? (setBy.kind || 'organizer') : null;
+  const ts = nowIso();
   if (existing) {
     await getDb().run(
-      `UPDATE rsvps SET status=?, party_size=?, message=?, message_visibility=?, updated_at=? WHERE id=?`,
-      [status, party, msg, vis, ts, existing.id]
+      `UPDATE rsvps SET status=?, party_size=?, message=?, message_visibility=?, set_by_name=?, set_by_kind=?, updated_at=? WHERE id=?`,
+      [status, party, msg, vis, setByName, setByKind, ts, existing.id]
     );
     return await getRsvp(playerId, gameId);
   }
   await getDb().run(
-    `INSERT INTO rsvps (player_id, game_night_id, status, party_size, message, message_visibility, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [playerId, gameId, status, party, msg, vis, ts, ts]
+    `INSERT INTO rsvps (player_id, game_night_id, status, party_size, message, message_visibility, set_by_name, set_by_kind, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [playerId, gameId, status, party, msg, vis, setByName, setByKind, ts, ts]
   );
   return await getRsvp(playerId, gameId);
 }
@@ -468,10 +538,12 @@ async function runInviteJob(now = new Date()) {
   const subject = st.group_name + ' — you\'re invited for ' + formatNiceDate(game.game_date);
   const sent = [];
   for (const p of players) {
+    const venue = effectiveVenue(game, st);
     const text =
       'Game: ' + formatNiceDate(game.game_date) + '\n' +
-      'Time: ' + formatTime12(game.start_time) + '–' + formatTime12(game.end_time) + '\n\n' +
-      'RSVP here (private link): ' + rsvpUrl(p) + '\n';
+      'Time: ' + formatTime12(game.start_time) + '–' + formatTime12(game.end_time) + '\n' +
+      (venue ? 'Where: ' + venue + '\n' : '') +
+      '\nRSVP here (private link): ' + rsvpUrl(p) + '\n';
     await notify.sendEmail({
       to: p.email,
       subject,
@@ -492,11 +564,13 @@ async function runReminderJob(now = new Date()) {
   const st = await getSettings();
   const subject = 'Reminder: RSVP for ' + st.group_name + ' on ' + formatNiceDate(game.game_date);
   for (const p of unanswered) {
+    const venue = effectiveVenue(game, st);
     const text =
       'We have not heard from you yet.\n\n' +
       'Game: ' + formatNiceDate(game.game_date) + '\n' +
-      'Time: ' + formatTime12(game.start_time) + '–' + formatTime12(game.end_time) + '\n\n' +
-      'RSVP here: ' + rsvpUrl(p) + '\n';
+      'Time: ' + formatTime12(game.start_time) + '–' + formatTime12(game.end_time) + '\n' +
+      (venue ? 'Where: ' + venue + '\n' : '') +
+      '\nRSVP here: ' + rsvpUrl(p) + '\n';
     await notify.sendEmail({
       to: p.email,
       subject,
@@ -562,6 +636,213 @@ async function runAutoCancelJob(now = new Date()) {
   return { ok: true, cancelled: true, game: cancelled, tally: t, stub: true };
 }
 
+
+function displayFirstName(name) {
+  const s = String(name || '').trim();
+  if (!s) return 'the organizer';
+  return s.split(/\s+/)[0].replace(/[()]/g, '') || s;
+}
+
+async function organizerDisplayName(admin) {
+  if (!admin) return 'the organizer';
+  if (admin.player_id) {
+    const linked = await getPlayer(admin.player_id);
+    if (linked) return displayFirstName(linked.name);
+  }
+  const byEmail = admin.email ? await getPlayerByEmail(admin.email) : null;
+  if (byEmail) return displayFirstName(byEmail.name);
+  const local = String(admin.email || '').split('@')[0];
+  return displayFirstName(local);
+}
+
+function grantStatus(grant, today) {
+  if (!grant) return 'missing';
+  const day = today || todayISO();
+  if (grant.revoked_at) return 'revoked';
+  if (String(grant.ends_on) < day) return 'expired';
+  if (String(grant.starts_on) > day) return 'upcoming';
+  return 'active';
+}
+
+async function defaultGrantDates() {
+  const game = await nextScheduledGame();
+  if (game) return { starts_on: game.game_date, ends_on: addDaysISO(game.game_date, 1) };
+  const start = upcomingMondayOnOrAfter(todayISO());
+  return { starts_on: start, ends_on: addDaysISO(start, 1) };
+}
+
+function decorateGrant(row, today) {
+  if (!row) return row;
+  return { ...row, status: grantStatus(row, today || todayISO()) };
+}
+
+async function listGrants() {
+  const today = todayISO();
+  const rows = await getDb().all(
+    `SELECT g.*, p.name AS player_name, p.email AS player_email, a.email AS admin_email
+     FROM temp_organizer_grants g
+     JOIN players p ON p.id = g.player_id
+     LEFT JOIN admin_users a ON a.id = g.admin_user_id
+     ORDER BY g.created_at DESC, g.id DESC`
+  );
+  return (rows || []).map((r) => decorateGrant(r, today));
+}
+
+async function currentTempOrganizerBanner() {
+  const today = todayISO();
+  const rows = await getDb().all(
+    `SELECT g.*, p.name AS player_name
+     FROM temp_organizer_grants g
+     JOIN players p ON p.id = g.player_id
+     WHERE g.revoked_at IS NULL AND g.ends_on >= ?
+     ORDER BY g.starts_on ASC, g.id ASC`,
+    [today]
+  );
+  const list = (rows || []).map((r) => decorateGrant(r, today)).filter((g) => g.status === 'active' || g.status === 'upcoming');
+  return list[0] || null;
+}
+
+async function getGrant(id) {
+  const row = await getDb().get(
+    `SELECT g.*, p.name AS player_name, p.email AS player_email
+     FROM temp_organizer_grants g
+     JOIN players p ON p.id = g.player_id
+     WHERE g.id = ?`,
+    [id]
+  );
+  return decorateGrant(row);
+}
+
+async function getActiveGrantForAdmin(adminId, today) {
+  const day = today || todayISO();
+  const row = await getDb().get(
+    `SELECT g.*, p.name AS player_name, p.email AS player_email
+     FROM temp_organizer_grants g
+     JOIN players p ON p.id = g.player_id
+     WHERE g.admin_user_id = ? AND g.revoked_at IS NULL AND g.starts_on <= ? AND g.ends_on >= ?
+     ORDER BY g.id DESC LIMIT 1`,
+    [adminId, day, day]
+  );
+  return decorateGrant(row, day);
+}
+
+async function openGrantForAdmin(adminId) {
+  const today = todayISO();
+  const row = await getDb().get(
+    `SELECT g.*, p.name AS player_name, p.email AS player_email
+     FROM temp_organizer_grants g
+     JOIN players p ON p.id = g.player_id
+     WHERE g.admin_user_id = ? AND g.revoked_at IS NULL
+     ORDER BY g.id DESC LIMIT 1`,
+    [adminId]
+  );
+  return decorateGrant(row, today);
+}
+
+function validIsoDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+}
+
+async function grantTempOrganizer({ playerId, starts_on, ends_on, grantedBy }) {
+  const player = await getPlayer(playerId);
+  if (!player || !player.active) throw Object.assign(new Error('Choose an active player.'), { status: 400 });
+  if (!validIsoDate(starts_on) || !validIsoDate(ends_on)) {
+    throw Object.assign(new Error('Start and end dates are required.'), { status: 400 });
+  }
+  if (String(ends_on) < String(starts_on)) {
+    throw Object.assign(new Error('The end date cannot be before the start date.'), { status: 400 });
+  }
+  if (String(ends_on) < todayISO()) {
+    throw Object.assign(new Error('The end date cannot be in the past.'), { status: 400 });
+  }
+  const today = todayISO();
+  const existing = await getDb().get(
+    `SELECT id FROM temp_organizer_grants
+     WHERE revoked_at IS NULL AND ends_on >= ? LIMIT 1`,
+    [today]
+  );
+  if (existing) {
+    throw Object.assign(new Error('A temporary organizer is already assigned. Revoke that access first.'), { status: 400 });
+  }
+  const ts = nowIso();
+  const result = await getDb().run(
+    `INSERT INTO temp_organizer_grants (player_id, admin_user_id, starts_on, ends_on, revoked_at, granted_by, created_at, updated_at)
+     VALUES (?, NULL, ?, ?, NULL, ?, ?, ?)`,
+    [player.id, starts_on, ends_on, grantedBy || null, ts, ts]
+  );
+  const grant = await getGrant(result.lastInsertRowid);
+  const setupToken = require('./setup-token');
+  const endMs = Date.parse(ends_on + 'T23:59:59-07:00') - Date.now();
+  const ttlMs = Math.max(7 * 24 * 60 * 60 * 1000, endMs);
+  const created = await setupToken.createToken({ purpose: 'temp', grantId: grant.id, source: 'temp', ttlMs });
+  return { grant, token: created.token, setupPath: '/setup/' + created.token, expiresAt: created.expiresAt };
+}
+
+async function revokeGrant(id) {
+  const grant = await getGrant(id);
+  if (!grant) throw Object.assign(new Error('That temporary organizer assignment was not found.'), { status: 404 });
+  if (grant.revoked_at) return decorateGrant(grant);
+  await getDb().run(
+    'UPDATE temp_organizer_grants SET revoked_at = ?, updated_at = ? WHERE id = ?',
+    [nowIso(), nowIso(), id]
+  );
+  return await getGrant(id);
+}
+
+async function completeTempSetup(token, { email, passwordHash }) {
+  const setupToken = require('./setup-token');
+  const { createAdmin, getAdminByEmail, getAdminById } = require('./auth');
+  const checked = await setupToken.inspectToken(token);
+  if (!checked.ok) return checked;
+  if (checked.purpose !== 'temp' || !checked.grantId) {
+    return { ok: false, reason: 'invalid' };
+  }
+  const grant = await getGrant(checked.grantId);
+  if (!grant || grant.revoked_at || grant.status === 'expired') {
+    return { ok: false, reason: 'expired' };
+  }
+  const normalized = String(email || '').trim();
+  const clash = await getAdminByEmail(normalized);
+  let admin;
+  if (grant.admin_user_id) {
+    if (clash && Number(clash.id) !== Number(grant.admin_user_id)) {
+      throw Object.assign(new Error('That email is already in use.'), { status: 400 });
+    }
+    await getDb().run('UPDATE admin_users SET email = ?, password_hash = ?, player_id = ?, role = ? WHERE id = ?', [
+      normalized,
+      passwordHash,
+      grant.player_id,
+      'temp',
+      grant.admin_user_id,
+    ]);
+    admin = await getAdminById(grant.admin_user_id);
+  } else if (clash && clash.role === 'temp' && Number(clash.player_id) === Number(grant.player_id)) {
+    await getDb().run('UPDATE admin_users SET email = ?, password_hash = ? WHERE id = ?', [
+      normalized,
+      passwordHash,
+      clash.id,
+    ]);
+    admin = await getAdminById(clash.id);
+    await getDb().run('UPDATE temp_organizer_grants SET admin_user_id = ?, updated_at = ? WHERE id = ?', [
+      admin.id,
+      nowIso(),
+      grant.id,
+    ]);
+  } else if (clash) {
+    throw Object.assign(new Error('That email is already in use.'), { status: 400 });
+  } else {
+    admin = await createAdmin(normalized, passwordHash, { role: 'temp', playerId: grant.player_id });
+    await getDb().run('UPDATE temp_organizer_grants SET admin_user_id = ?, updated_at = ? WHERE id = ?', [
+      admin.id,
+      nowIso(),
+      grant.id,
+    ]);
+  }
+  const consumed = await setupToken.consumeToken(token);
+  if (!consumed.ok) return consumed;
+  return { ok: true, admin, grant: await getGrant(grant.id) };
+}
+
 module.exports = {
   DEFAULT_SETTINGS,
   ensureSettings,
@@ -584,7 +865,11 @@ module.exports = {
   restoreGame,
   cancelGame,
   updateGameTimes,
+  effectiveVenue,
   nextScheduledGame,
+  nextPlayerFacingGame,
+  notifyPlayersOfCancellation,
+  cancelUpcomingGame,
   gamesInMonth,
   upcomingList,
   partyFor,
@@ -600,4 +885,16 @@ module.exports = {
   runReminderJob,
   runAutoCancelJob,
   holidaySkipReason,
+  displayFirstName,
+  organizerDisplayName,
+  grantStatus,
+  defaultGrantDates,
+  listGrants,
+  currentTempOrganizerBanner,
+  getGrant,
+  getActiveGrantForAdmin,
+  openGrantForAdmin,
+  grantTempOrganizer,
+  revokeGrant,
+  completeTempSetup,
 };

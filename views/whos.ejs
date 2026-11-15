@@ -12,11 +12,19 @@
       <p>
         <strong>Game:</strong> <%= formatNiceDate(game.game_date) %><br />
         <strong>Time:</strong> <%= formatTime12(game.start_time) %>–<%= formatTime12(game.end_time) %><br />
+        <% if (typeof venue !== 'undefined' && venue) { %>
+          <strong>Venue:</strong> <span id="whos-game-venue"><%= venue %></span><br />
+        <% } %>
+        <% if (game.status === 'cancelled') { %>
+          <span class="status-pill cancelled">Cancelled</span>
+          <% if (game.skip_reason) { %><span> <%= game.skip_reason %></span><% } %>
+        <% } else { %>
         Confirmed people: <strong><%= view.tally.yesPeople %></strong> (need <%= view.tally.minimum %>)
         <% if (view.tally.meetsMinimum) { %>
           <span class="status-pill on">Looks like a game</span>
         <% } else { %>
           <span class="status-pill warn">Short so far</span>
+        <% } %>
         <% } %>
       </p>
       <div style="overflow-x:auto">

@@ -46,16 +46,24 @@ function createApp() {
     res.locals.currentPath = req.path;
     res.locals.isProd = config.nodeEnv === 'production';
     res.locals.admin = null;
-    if (req.session && req.session.adminId) {
-      try {
-        const admin = await auth.getAdminById(req.session.adminId);
-        if (admin) {
-          req.admin = admin;
-          res.locals.admin = admin;
-        }
-      } catch (err) {
-        return next(err);
+    res.locals.actor = null;
+    res.locals.tempOrganizerBanner = null;
+    try {
+      const actor = await auth.actorFromSession(req);
+      req.actor = actor;
+      if (actor && !actor.blocked) {
+        req.admin = actor.admin;
+        res.locals.admin = actor.admin;
+        res.locals.actor = actor;
+      } else if (actor && actor.blocked) {
+        req.session.adminId = null;
       }
+      const svc = require('./services');
+      const { formatNiceDate } = require('./dates');
+      res.locals.tempOrganizerBanner = await svc.currentTempOrganizerBanner();
+      res.locals.formatNiceDate = formatNiceDate;
+    } catch (err) {
+      return next(err);
     }
     next();
   });

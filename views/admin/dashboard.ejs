@@ -1,6 +1,6 @@
 <%- include('../partials/header') %>
 <section>
-  <div class="card">
+  <div class="card" id="game" tabindex="-1">
     <h2>Next game</h2>
     <% if (!game) { %>
       <p class="muted">No upcoming scheduled Monday. Check the calendar to restore a night.</p>
@@ -8,54 +8,91 @@
       <p id="dash-game-summary">
         <strong>Game:</strong> <%= formatNiceDate(game.game_date) %><br />
         <strong>Time:</strong> <%= formatTime12(game.start_time) %>–<%= formatTime12(game.end_time) %>
-      </p>
-      <p>
-        <% if (tally.meetsMinimum) { %>
-          <span class="status-pill on">On track — <%= tally.yesPeople %> confirmed (need <%= tally.minimum %>)</span>
-        <% } else { %>
-          <span class="status-pill warn">Short so far — <%= tally.yesPeople %> confirmed (need <%= tally.minimum %>)</span>
+        <% if (typeof venue !== 'undefined' && venue) { %>
+          <br /><strong>Venue:</strong> <span id="dash-game-venue"><%= venue %></span>
         <% } %>
       </p>
-      <div class="stat-row" aria-live="polite">
-        <div class="stat yes"><div class="n"><%= tally.yesPeople %></div><div class="l">Yes (people, incl. guests)</div></div>
-        <div class="stat no"><div class="n"><%= tally.no %></div><div class="l">No</div></div>
-        <div class="stat maybe"><div class="n"><%= tally.maybe %></div><div class="l">Maybe</div></div>
-        <div class="stat unanswered"><div class="n"><%= tally.unanswered %></div><div class="l">Unanswered</div></div>
-      </div>
-      <p class="muted">Yes total counts guests. Maybe does not count. Auto-cancel is <%= settings.auto_cancel_enabled ? 'ON' : 'OFF' %> at <%= formatTime12(settings.cutoff_time) %> on game day, minimum <%= settings.minimum_yes %>.</p>
-      <h3>Attendees for this game</h3>
-      <div style="overflow-x:auto">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Player</th>
-              <th scope="col">RSVP</th>
-              <th scope="col">Party size</th>
-              <th scope="col">Message</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% tally.rows.forEach(function (row) { %>
-              <tr>
-                <td><%= row.player.name %></td>
-                <td><%= row.status === 'unanswered' ? '—' : row.status %></td>
-                <td><%= row.status === 'yes' ? row.coming : '—' %></td>
-                <td>
-                  <% if (row.rsvp && row.rsvp.message) { %>
-                    <span class="vis-tag"><%= row.rsvp.message_visibility === 'group' ? 'Group' : 'Organizer only' %></span>
-                    <%= row.rsvp.message %>
-                  <% } else { %>—<% } %>
-                </td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
-      <div class="row-actions">
-        <form method="post" action="/admin/jobs/auto-cancel">
-          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-          <button type="submit" class="btn btn-secondary">Run auto-cancel check now (log only)</button>
-        </form>
+      <% if (game.status === 'cancelled') { %>
+        <p>
+          <span class="status-pill cancelled">Cancelled</span>
+          <% if (game.skip_reason) { %><span class="muted"> <%= game.skip_reason %></span><% } %>
+        </p>
+        <div class="cancel-game-box">
+          <form method="post" action="/dashboard/reinstate" onsubmit="return confirm('Reinstate the game on <%= formatNiceDate(game.game_date) %>?');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <button type="submit" class="btn btn-primary" id="reinstate-game-btn">Reinstate game</button>
+          </form>
+        </div>
+      <% } else { %>
+        <p>
+          <% if (tally.meetsMinimum) { %>
+            <span class="status-pill on">On track — <%= tally.yesPeople %> confirmed (need <%= tally.minimum %>)</span>
+          <% } else { %>
+            <span class="status-pill warn">Short so far — <%= tally.yesPeople %> confirmed (need <%= tally.minimum %>)</span>
+          <% } %>
+        </p>
+        <div class="stat-row" aria-live="polite">
+          <div class="stat yes"><div class="n"><%= tally.yesPeople %></div><div class="l">Yes (people, incl. guests)</div></div>
+          <div class="stat no"><div class="n"><%= tally.no %></div><div class="l">No</div></div>
+          <div class="stat maybe"><div class="n"><%= tally.maybe %></div><div class="l">Maybe</div></div>
+          <div class="stat unanswered"><div class="n"><%= tally.unanswered %></div><div class="l">Unanswered</div></div>
+        </div>
+        <p class="muted">Yes total counts guests. Maybe does not count. Auto-cancel is <%= settings.auto_cancel_enabled ? 'ON' : 'OFF' %> at <%= formatTime12(settings.cutoff_time) %> on game day, minimum <%= settings.minimum_yes %>.</p>
+        <div class="cancel-game-box">
+          <form method="post" action="/dashboard/cancel" id="cancel-game-form" onsubmit="return confirm('Cancel the game on <%= formatNiceDate(game.game_date) %>? Players will be notified (logged only during testing).');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <label class="field">Optional reason
+              <input type="text" name="reason" maxlength="200" placeholder="e.g. Only two people can make it" aria-label="Optional cancellation reason" />
+            </label>
+            <div class="row-actions">
+              <button type="submit" class="btn btn-danger" id="cancel-game-btn">Cancel this game</button>
+            </div>
+          </form>
+        </div>
+      <% } %>
+      <h3 id="attendees" tabindex="-1">Attendees for this game</h3>
+      <p class="muted">You can set or change a player’s RSVP here if they call or text. Changes are recorded as set by you.</p>
+      <div class="attendee-list">
+        <% tally.rows.forEach(function (row) { %>
+          <div class="attendee-card">
+            <div class="attendee-head">
+              <strong><%= row.player.name %></strong>
+              <span class="attendee-status"><%= row.status === 'unanswered' ? 'No reply yet' : row.status %><% if (row.status === 'yes') { %> · party of <%= row.coming %><% } %></span>
+              <% if (row.setByName) { %>
+                <span class="set-by">set by <%= row.setByName %></span>
+              <% } %>
+            </div>
+            <% if (game.status === 'scheduled' && actor && actor.canOverrideRsvp) { %>
+              <form class="rsvp-override" method="post" action="/dashboard/rsvp/<%= row.player.id %>">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <div class="override-controls">
+                  <label class="field compact">RSVP
+                    <select name="status" aria-label="RSVP for <%= row.player.name %>">
+                      <option value="yes" <%= row.status === 'yes' ? 'selected' : '' %>>Yes</option>
+                      <option value="no" <%= row.status === 'no' ? 'selected' : '' %>>No</option>
+                      <option value="maybe" <%= row.status === 'maybe' ? 'selected' : '' %>>Maybe</option>
+                    </select>
+                  </label>
+                  <label class="field compact">Party size
+                    <input type="number" name="party_size" min="1" max="12" value="<%= row.status === 'yes' && row.coming ? row.coming : 1 %>" aria-label="Party size for <%= row.player.name %>" />
+                  </label>
+                  <button type="submit" class="btn btn-secondary btn-sm">Update RSVP</button>
+                </div>
+              </form>
+            <% } else if (row.rsvp && row.rsvp.message) { %>
+              <p class="attendee-msg">
+                <span class="vis-tag"><%= row.rsvp.message_visibility === 'group' ? 'Group' : 'Organizer only' %></span>
+                <%= row.rsvp.message %>
+              </p>
+            <% } %>
+            <% if (game.status === 'scheduled' && row.rsvp && row.rsvp.message) { %>
+              <p class="attendee-msg">
+                <span class="vis-tag"><%= row.rsvp.message_visibility === 'group' ? 'Group' : 'Organizer only' %></span>
+                <%= row.rsvp.message %>
+              </p>
+            <% } %>
+          </div>
+        <% }) %>
       </div>
     <% } %>
   </div>

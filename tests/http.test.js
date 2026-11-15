@@ -192,7 +192,8 @@ describe('HTTP flows', () => {
 
     const mike = await svc.getPlayerByEmail('mike@example.com');
     const edit = await c.get('/players?edit=' + mike.id);
-    assert.match(edit.text, /Only needed if a link was forwarded or shared/);
+    assert.doesNotMatch(edit.text, /Only needed if a link was forwarded or shared/);
+    assert.doesNotMatch(edit.text, /Players already get this link/);
     assert.match(edit.text, /Create a new RSVP link/);
     assert.match(edit.text, /Copy RSVP link/);
 
@@ -274,7 +275,8 @@ describe('HTTP flows', () => {
     assert.equal(override.res.status, 302);
     assert.match(override.res.headers.get('location') || '', /#attendees/);
     page = await c.get('/');
-    assert.match(page.text, /set by Eric/);
+    assert.match(page.text, /RSVP updated/);
+    assert.doesNotMatch(page.text, /set by /);
     assert.match(page.text, /class="rsvp-cell-btn is-yes"/);
 
     const guest = new Client();
@@ -370,7 +372,8 @@ describe('HTTP flows', () => {
     });
     assert.equal(override.res.status, 302);
     page = await temp.get('/');
-    assert.match(page.text, /set by Dave/);
+    assert.match(page.text, /RSVP updated/);
+    assert.doesNotMatch(page.text, /set by /);
 
     const cancel = await temp.post('/dashboard/cancel', { _csrf: csrfFrom(page.text), reason: 'Need a new venue' });
     assert.equal(cancel.res.status, 302);

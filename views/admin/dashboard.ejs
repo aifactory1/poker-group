@@ -3,7 +3,7 @@
   <div class="card" id="game" tabindex="-1">
     <h2>Next game</h2>
     <% if (!game) { %>
-      <p class="muted">No upcoming scheduled Monday. Check the calendar to restore a night.</p>
+      <p class="muted">No upcoming scheduled Monday.</p>
     <% } else { %>
       <p id="dash-game-summary">
         <strong>Game:</strong> <%= formatNiceDate(game.game_date) %><br />
@@ -37,7 +37,7 @@
           <div class="stat maybe"><div class="n"><%= tally.maybe %></div><div class="l">Maybe</div></div>
           <div class="stat unanswered"><div class="n"><%= tally.unanswered %></div><div class="l">Unanswered</div></div>
         </div>
-        <p class="muted">Yes total counts guests. Maybe does not count. Auto-cancel is <%= settings.auto_cancel_enabled ? 'ON' : 'OFF' %> at <%= formatTime12(settings.cutoff_time) %> on game day, minimum <%= settings.minimum_yes %>.</p>
+        <p class="muted">Auto-cancel is <%= settings.auto_cancel_enabled ? 'ON' : 'OFF' %> at <%= formatTime12(settings.cutoff_time) %>, minimum <%= settings.minimum_yes %>.</p>
         <div class="cancel-game-box">
           <form method="post" action="/dashboard/cancel" id="cancel-game-form" onsubmit="return confirm('Cancel the game on <%= formatNiceDate(game.game_date) %>? Players will be notified (logged only during testing).');">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
@@ -53,7 +53,6 @@
       <h3 id="attendees" tabindex="-1">Attendees for this game</h3>
       <% var canOverride = game.status === 'scheduled' && actor && actor.canOverrideRsvp; %>
       <% if (canOverride) { %>
-        <p class="muted">Tap a player’s RSVP to change it if they call or text. Changes are recorded as set by you.</p>
       <% } %>
       <div class="attendees-wrap">
         <table id="attendees-table">
@@ -87,9 +86,6 @@
                     ><%= statusLabel %></button>
                   <% } else { %>
                     <span class="rsvp-cell-text is-<%= row.status %>"><%= statusLabel %></span>
-                  <% } %>
-                  <% if (row.setByName) { %>
-                    <div class="set-by">set by <%= row.setByName %></div>
                   <% } %>
                 </td>
                 <td><%= row.status === 'yes' ? row.coming : '—' %></td>

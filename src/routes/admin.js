@@ -63,7 +63,7 @@ router.post('/dashboard/rsvp/:playerId', async (req, res, next) => {
       party_size: req.body.party_size,
       setBy: { name: setByName, kind: req.actor.isOwner ? 'organizer' : 'temp_organizer' },
     });
-    req.flash('ok', 'RSVP updated and recorded as set by ' + setByName + '.');
+    req.flash('ok', 'RSVP updated.');
   } catch (err) {
     if (err.status === 403) return next(err);
     req.flash('error', err.message);

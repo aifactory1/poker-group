@@ -651,8 +651,7 @@ async function organizerDisplayName(admin) {
   }
   const byEmail = admin.email ? await getPlayerByEmail(admin.email) : null;
   if (byEmail) return displayFirstName(byEmail.name);
-  const local = String(admin.email || '').split('@')[0];
-  return displayFirstName(local);
+  return 'the organizer';
 }
 
 function grantStatus(grant, today) {

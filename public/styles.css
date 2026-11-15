@@ -374,25 +374,14 @@
       text-decoration: underline dotted; text-underline-offset: 3px;
       text-decoration-thickness: 1px;
     }
-    .rsvp-cell-btn::after {
-      content: " ✎"; font-weight: 400; font-size: .78em; opacity: .4;
-    }
     .rsvp-cell-btn:hover, .rsvp-cell-btn:focus-visible {
       text-decoration-style: solid;
       outline: 2px solid rgba(15, 92, 56, .4); outline-offset: 2px;
     }
-    .rsvp-cell-btn:hover::after, .rsvp-cell-btn:focus-visible::after,
-    .rsvp-cell-btn[aria-expanded="true"]::after { opacity: .8; }
     .rsvp-cell-btn.is-yes, .rsvp-cell-text.is-yes { color: #1f8a4c; }
     .rsvp-cell-btn.is-no, .rsvp-cell-text.is-no { color: #c0392b; }
     .rsvp-cell-btn.is-maybe, .rsvp-cell-text.is-maybe { color: #8a6a00; }
     .rsvp-cell-btn.is-unanswered, .rsvp-cell-text.is-unanswered { color: #555; font-weight: 600; }
-    .set-by {
-      display: inline-block; margin-top: .2rem;
-      font-size: .72rem; font-weight: 700; color: #1a237e;
-      background: #eef0ff; border-radius: 999px; padding: .05rem .45rem;
-    }
-    .rsvp-cell-btn + .set-by, .rsvp-cell-text + .set-by { display: block; }
     .rsvp-editor {
       position: fixed; z-index: 40; width: min(20.5rem, calc(100vw - 1.25rem));
       background: #fffdf8; color: var(--ink);

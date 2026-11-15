@@ -199,4 +199,21 @@ describe('services: players, calendar, RSVP, tallies', () => {
     assert.equal(revoked.status, 'revoked');
     assert.equal(await svc.getActiveGrantForAdmin(tempAdmin.id, '2026-11-16'), undefined);
   });
+
+  it('does not use a login email as an organizer display name', async () => {
+    const fromEmailOnly = await svc.organizerDisplayName({
+      email: 'ericwald+pokersite@gmail.com',
+      role: 'owner',
+      player_id: null,
+    });
+    assert.equal(fromEmailOnly, 'the organizer');
+    const eric = await svc.getPlayerByEmail('eric@example.com');
+    const linked = await svc.organizerDisplayName({
+      email: 'ericwald+pokersite@gmail.com',
+      player_id: eric.id,
+    });
+    assert.equal(linked, 'Eric');
+    const matched = await svc.organizerDisplayName({ email: 'eric@example.com' });
+    assert.equal(matched, 'Eric');
+  });
 });

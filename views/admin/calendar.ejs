@@ -2,7 +2,6 @@
 <section>
   <div class="card">
     <h2>Recurring Mondays</h2>
-    <p class="muted">Games are Mondays by default. Tap a date to select it (navy with a gold border) and to jump to Skip or time changes. Selecting alone does not skip a night. Past dates are grayed out and cannot be edited. U.S. federal holidays and major Jewish holidays are computed for any year. Jewish holidays begin at sundown the evening before, so a Monday is flagged when the holiday falls that day or starts that evening. Holiday Mondays start as suggested skips and can be restored.</p>
     <% if (typeof actor !== 'undefined' && actor && actor.isOwner) { %>
     <form method="post" action="/calendar/times" id="cal-defaults">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
@@ -64,10 +63,9 @@
         <% } %>
       <% }) %>
     </div>
-    <div class="cal-selected-bar" id="cal-details" tabindex="-1" aria-live="polite">
-      <% if (!selected) { %>
-        <div>Tap a future date to select it and jump here to skip a Monday or change the time. Past dates are grayed out.</div>
-      <% } else { %>
+    <div id="cal-details" tabindex="-1"></div>
+    <% if (selected) { %>
+    <div class="cal-selected-bar" aria-live="polite">
         <div><strong>Selected:</strong> <%= formatNiceDate(selected) %>
           <% if (selectedGame) { %>
             — <%= selectedGame.status %><% if (selectedGame.skip_reason) { %> (<%= selectedGame.skip_reason %>)<% } %>
@@ -81,7 +79,7 @@
           <% } %>
         </div>
         <% if (selectedHoliday && selectedGame) { %>
-          <p class="muted" style="margin:.4rem 0 0">Holiday: <%= selectedHoliday.label %>. This is a suggested skip — you can restore the game if you still want to play.</p>
+          <p class="muted" style="margin:.4rem 0 0">Holiday: <%= selectedHoliday.label %></p>
         <% } else if (selectedHoliday) { %>
           <p class="muted" style="margin:.4rem 0 0">Holiday: <%= selectedHoliday.label %></p>
         <% } %>
@@ -119,16 +117,15 @@
               </label>
             </div>
             <label class="field">Venue this night
-              <input type="text" name="venue" value="<%= (selectedGame.venue && String(selectedGame.venue).trim()) || (settings.default_venue || '') %>" placeholder="Leave blank to use the default venue" />
-              <span class="hint">Overrides the default venue for this Monday only.</span>
+              <input type="text" name="venue" value="<%= (selectedGame.venue && String(selectedGame.venue).trim()) || (settings.default_venue || '') %>" />
             </label>
             <div class="row-actions">
               <button type="submit" class="btn btn-secondary btn-sm">Save time and venue for this Monday</button>
             </div>
           </form>
         <% } %>
-      <% } %>
     </div>
+    <% } %>
     <h3>Upcoming scheduled nights</h3>
     <ul class="check-list">
       <% upcoming.forEach(function (g) { %>

@@ -2,7 +2,6 @@
 <section>
   <div class="card">
     <h2>Announcements</h2>
-    <p class="muted">Compose a message and choose recipients. Phase 1 shows a preview and writes a send log — <strong>no email or text is actually sent</strong>.</p>
     <% if (game) { %>
       <p>Next game: <strong><%= formatNiceDate(game.game_date) %></strong> · <%= formatTime12(game.start_time) %>–<%= formatTime12(game.end_time) %></p>
     <% } %>
